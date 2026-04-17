@@ -1,0 +1,18 @@
+name: SneakyGroundItems
+version: "1.0"
+main: com.danidipp.sneakygrounditems.SneakyGroundItems
+api-version: "1.21"
+authors:
+  - DaniDipp
+description: "Dedicated Paper plugin for custom placed ground items"
+dependencies:
+  server:
+    MagicSpells:
+      load: BEFORE
+      required: false
+    WorldGuard:
+      load: BEFORE
+      required: false
+    CoreProtect:
+      load: BEFORE
+      required: false
