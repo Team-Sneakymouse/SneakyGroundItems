@@ -26,10 +26,7 @@ internal class GroundItemCommand(
     fun build(): LiteralCommandNode<CommandSourceStack> =
         Commands.literal("grounditem")
             .requires { source ->
-                GroundItemPermissions.hasLockPermission(source.sender) ||
-                    GroundItemPermissions.hasUnlockPermission(source.sender) ||
-                    GroundItemPermissions.hasPopPermission(source.sender) ||
-                    GroundItemPermissions.hasAdminPermission(source.sender)
+                source.sender.hasAnyPermission(LOCK_PERMISSION, UNLOCK_PERMISSION, POP_PERMISSION, ADMIN_PERMISSION)
             }
             .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|migrate> ...") }
             .then(buildLockCommand())
@@ -40,10 +37,7 @@ internal class GroundItemCommand(
 
     private fun buildLockCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("lock")
-            .requires {
-                GroundItemPermissions.hasLockPermission(it.sender) ||
-                    GroundItemPermissions.hasAdminPermission(it.sender)
-            }
+            .requires { it.sender.hasAnyPermission(LOCK_PERMISSION, ADMIN_PERMISSION) }
             .executes { lockOrUnlock(it, lock = true, targetName = null) }
             .then(
                 Commands.argument("playerName", StringArgumentType.word())
@@ -53,10 +47,7 @@ internal class GroundItemCommand(
 
     private fun buildUnlockCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("unlock")
-            .requires {
-                GroundItemPermissions.hasUnlockPermission(it.sender) ||
-                    GroundItemPermissions.hasAdminPermission(it.sender)
-            }
+            .requires { it.sender.hasAnyPermission(UNLOCK_PERMISSION, ADMIN_PERMISSION) }
             .executes { lockOrUnlock(it, lock = false, targetName = null) }
             .then(
                 Commands.argument("playerName", StringArgumentType.word())
@@ -66,13 +57,13 @@ internal class GroundItemCommand(
 
     private fun buildPopCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("pop")
-            .requires { GroundItemPermissions.hasPopPermission(it.sender) }
+            .requires { it.sender.hasPermission(POP_PERMISSION) }
             .then(buildPopRaycastCommand())
             .then(buildPopCoordinatesCommand())
 
     private fun buildMigrateCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("migrate")
-            .requires { GroundItemPermissions.hasAdminPermission(it.sender) }
+            .requires { it.sender.hasPermission(ADMIN_PERMISSION) }
             .executes { migrate(it, dryRun = false) }
             .then(
                 Commands.literal("dry")
@@ -201,7 +192,13 @@ internal class GroundItemCommand(
         }
     }.buildFuture()
 
-    private companion object {
+    private fun CommandSender.hasAnyPermission(vararg permissions: String): Boolean = permissions.any(::hasPermission)
+
+    companion object {
         const val DEFAULT_POP_RADIUS = 2.5
+        const val LOCK_PERMISSION = "sneakygrounditems.command.lock"
+        const val UNLOCK_PERMISSION = "sneakygrounditems.command.unlock"
+        const val POP_PERMISSION = "sneakygrounditems.command.pop"
+        const val ADMIN_PERMISSION = "sneakygrounditems.command.admin"
     }
 }

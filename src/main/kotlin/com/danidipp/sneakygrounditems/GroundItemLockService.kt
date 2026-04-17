@@ -38,7 +38,7 @@ internal class GroundItemLockService(
     }
 
     fun canUnlock(actor: CommandSender, target: GroundItemTarget): Boolean {
-        if (GroundItemPermissions.hasAdminPermission(actor)) return true
+        if (actor.hasPermission(GroundItemCommand.ADMIN_PERMISSION)) return true
 
         val player = actor as? Player ?: return false
         return isPlotMember(player, target.display.location)
@@ -81,7 +81,7 @@ internal class GroundItemLockService(
         if (player != null && isPlotMember(player, location)) {
             return LockMode.PERMANENT
         }
-        if (GroundItemPermissions.hasAdminPermission(actor) && player?.gameMode == GameMode.CREATIVE) {
+        if (actor.hasPermission(GroundItemCommand.ADMIN_PERMISSION) && player?.gameMode == GameMode.CREATIVE) {
             return LockMode.PERMANENT
         }
         return LockMode.TEMPORARY
