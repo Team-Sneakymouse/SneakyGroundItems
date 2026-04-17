@@ -4,14 +4,12 @@ import org.bukkit.Location
 import org.bukkit.NamespacedKey
 import org.bukkit.block.BlockFace
 import org.bukkit.entity.Display
-import org.bukkit.entity.Interaction
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
-import java.util.UUID
 import java.util.concurrent.ThreadLocalRandom
 
 internal class GroundItemPlacementService(
@@ -30,24 +28,17 @@ internal class GroundItemPlacementService(
         val anchor = hitPosition.clone()
             .add(normal.clone().multiply(GroundItemConstants.SURFACE_EPSILON))
             .add(normal.clone().multiply(randomOffset))
-        val interactionLocation = interactionLocationForFace(anchor, hitFace, stackScale)
 
         return Placement(
             location = anchor,
-            interactionLocation = interactionLocation,
-            interactionScale = stackScale,
             transformation = transformationForFace(hitFace, playerYaw, stackScale),
-            face = hitFace,
         )
     }
 
-    fun spawnPair(placement: Placement, stack: ItemStack): Boolean {
+    fun spawnDisplay(placement: Placement, stack: ItemStack): Boolean {
         var display: ItemDisplay? = null
-        var interaction: Interaction? = null
 
         return runCatching {
-            val pairId = UUID.randomUUID().toString()
-
             display = placement.location.world.spawn(placement.location, ItemDisplay::class.java) { itemDisplay ->
                 itemDisplay.isPersistent = true
                 itemDisplay.setGravity(false)
@@ -56,25 +47,12 @@ internal class GroundItemPlacementService(
                 itemDisplay.billboard = Display.Billboard.FIXED
                 itemDisplay.transformation = placement.transformation
                 itemDisplay.setRotation(0.0f, 0.0f)
-                persistence.tagDisplay(itemDisplay, pairId)
+                persistence.tagDisplay(itemDisplay)
             }
 
-            interaction = placement.interactionLocation.world.spawn(placement.interactionLocation, Interaction::class.java) { target ->
-                target.isPersistent = true
-                target.setGravity(false)
-                target.isResponsive = true
-                target.interactionWidth = placement.interactionScale
-                target.interactionHeight = placement.interactionScale
-                persistence.tagInteraction(target, pairId)
-            }
-
-            val spawnedDisplay = display ?: return@runCatching false
-            val spawnedInteraction = interaction ?: return@runCatching false
-            persistence.linkPair(spawnedDisplay, spawnedInteraction, placement.face)
             true
         }.getOrElse {
             display?.remove()
-            interaction?.remove()
             false
         }
     }
@@ -91,7 +69,6 @@ internal class GroundItemPlacementService(
         val newScale = scaleForStack(currentStack)
         mergeTarget.setItemStack(currentStack)
         mergeTarget.transformation = rescaleTransformation(mergeTarget.transformation, newScale)
-        updateInteractionForDisplayScale(mergeTarget, newScale)
 
         return MergeResult(
             display = mergeTarget,
@@ -100,8 +77,10 @@ internal class GroundItemPlacementService(
         )
     }
 
-    fun syncInteractionToDisplay(display: ItemDisplay) {
-        updateInteractionForDisplayScale(display, scaleForStack(display.itemStack))
+    fun selectionRadiusForDisplay(display: ItemDisplay): Double {
+        return (scaleForStack(display.itemStack) / 2.0f)
+            .coerceIn(GroundItemConstants.MIN_SELECTION_RADIUS.toFloat(), GroundItemConstants.MAX_SELECTION_RADIUS.toFloat())
+            .toDouble()
     }
 
     private fun findMergeTarget(location: Location, stack: ItemStack): ItemDisplay? {
@@ -118,15 +97,6 @@ internal class GroundItemPlacementService(
             .filter { it.display.itemStack.amount < it.display.itemStack.maxStackSize.coerceAtLeast(1) }
             .minByOrNull { it.display.location.distanceSquared(location) }
             ?.display
-    }
-
-    private fun updateInteractionForDisplayScale(display: ItemDisplay, stackScale: Float) {
-        val target = persistence.resolveTarget(display) ?: return
-        target.interaction.interactionWidth = stackScale
-        target.interaction.interactionHeight = stackScale
-
-        val face = persistence.getStoredFace(display) ?: return
-        target.interaction.teleport(interactionLocationForFace(display.location, face, stackScale))
     }
 
     private fun rescaleTransformation(existing: Transformation, stackScale: Float): Transformation {
@@ -163,7 +133,7 @@ internal class GroundItemPlacementService(
         )
     }
 
-    private fun scaleForStack(stack: ItemStack): Float {
+    fun scaleForStack(stack: ItemStack): Float {
         val scaleRange = resolveGroundItemScaleRange(stack)
         val maxStackSize = stack.maxStackSize.coerceAtLeast(1)
         if (maxStackSize == 1) return scaleRange.max
@@ -192,25 +162,9 @@ internal class GroundItemPlacementService(
         return parsedValue.coerceAtLeast(0.0f)
     }
 
-    private fun interactionLocationForFace(anchor: Location, face: BlockFace, stackScale: Float): Location {
-        val scale = stackScale.toDouble()
-        return when (face) {
-            BlockFace.UP -> anchor.clone()
-            BlockFace.DOWN -> anchor.clone().subtract(0.0, scale, 0.0)
-            BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST -> anchor.clone()
-                .add(face.direction.clone().normalize().multiply(scale / 2.0))
-                .subtract(0.0, scale / 2.0, 0.0)
-
-            else -> anchor.clone()
-        }
-    }
-
     internal data class Placement(
         val location: Location,
-        val interactionLocation: Location,
-        val interactionScale: Float,
         val transformation: Transformation,
-        val face: BlockFace,
     )
 
     internal data class MergeResult(

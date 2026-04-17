@@ -1,6 +1,5 @@
 package com.danidipp.sneakygrounditems
 
-import org.bukkit.entity.Interaction
 import org.bukkit.entity.ItemDisplay
 
 enum class LockMode {
@@ -11,6 +10,4 @@ enum class LockMode {
 
 data class GroundItemTarget(
     val display: ItemDisplay,
-    val interaction: Interaction,
-    val pairId: String,
 )

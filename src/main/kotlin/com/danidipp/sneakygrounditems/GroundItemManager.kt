@@ -15,13 +15,17 @@ import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.Particle
 import org.bukkit.SoundCategory
+import org.bukkit.World
 import org.bukkit.block.Block
 import org.bukkit.block.BlockFace
-import org.bukkit.entity.Entity
 import org.bukkit.entity.Interaction
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
-import org.bukkit.event.entity.EntityDamageByEntityEvent
+import org.bukkit.event.Event.Result
+import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerDropItemEvent
+import org.bukkit.event.player.PlayerInteractEvent
+import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
@@ -34,12 +38,13 @@ internal class GroundItemManager(
     private val placementService = GroundItemPlacementService(persistence, lockService)
     private val soulboundOwnerKey = NamespacedKey.fromString("magicspells:soulbound_owner")
         ?: throw IllegalStateException("Failed to create NamespacedKey for magicspells:soulbound_owner")
-    private val pendingPickupPairIds = mutableSetOf<String>()
+    private val pendingPickupDisplayIds = mutableSetOf<UUID>()
     private val playerStateById = mutableMapOf<UUID, PlayerRuntimeState>()
     private val coreProtectApi: CoreProtectAPI? by lazy {
         val coreProtectPlugin = Bukkit.getPluginManager().getPlugin("CoreProtect") as? CoreProtect ?: return@lazy null
         coreProtectPlugin.api?.takeIf { it.isEnabled }
     }
+    private var activeMigration: MigrationState? = null
 
     fun processLoadedChunks() {
         for (world in Bukkit.getWorlds()) {
@@ -88,7 +93,7 @@ internal class GroundItemManager(
             return
         }
 
-        if (!placementService.spawnPair(placement, droppedStack)) return
+        if (!placementService.spawnDisplay(placement, droppedStack)) return
 
         markGroundItemCreated(event.player.uniqueId)
         playFeedback(event.player.uniqueId, placement.location, "lom:sfx.clothingequip")
@@ -96,62 +101,25 @@ internal class GroundItemManager(
         event.itemDrop.remove()
     }
 
-    fun handleEntityDamageByEntity(event: EntityDamageByEntityEvent) {
-        val player = event.damager as? Player ?: return
-        val interaction = event.entity as? Interaction ?: return
-        if (!persistence.isInteraction(interaction)) return
-        event.isCancelled = true
+    fun handlePlayerInteract(event: PlayerInteractEvent) {
+        if (event.useInteractedBlock() == Result.DENY || event.useItemInHand() == Result.DENY) return
+        if (event.action != Action.LEFT_CLICK_BLOCK) return
+        if (event.hand != EquipmentSlot.HAND) return
 
-        val target = persistence.resolveTarget(interaction) ?: run {
-            interaction.remove()
-            return
-        }
+        val player = event.player
+        val hitPosition = clickedHitPosition(event) ?: return
+        val target = findGroundItemNearHitPosition(player, hitPosition) ?: return
+
+        event.setUseInteractedBlock(Result.DENY)
+        event.setUseItemInHand(Result.DENY)
+        event.setCancelled(true)
+
         if (lockService.getLockMode(target) != LockMode.NONE) {
             player.playEffect(target.display.location, Effect.SMOKE, BlockFace.UP)
             return
         }
         if (!isPickupAllowed(player.uniqueId, target.display.itemStack)) return
-        if (!pendingPickupPairIds.add(target.pairId)) return
-
-        target.interaction.isResponsive = false
-
-        val pairId = target.pairId
-        val playerUuid = player.uniqueId
-        val displayUuid = target.display.uniqueId
-        val interactionUuid = target.interaction.uniqueId
-
-        Bukkit.getScheduler().runTask(plugin, Runnable {
-            try {
-                val display = persistence.resolveDisplay(displayUuid)
-                val targetInteraction = persistence.resolveInteraction(interactionUuid)
-
-                if (display == null || targetInteraction == null) {
-                    display?.remove()
-                    targetInteraction?.remove()
-                    return@Runnable
-                }
-
-                val stack = display.itemStack.clone()
-                val pickupLocation = display.location.clone()
-                persistence.removePair(display, targetInteraction)
-
-                val onlinePlayer = Bukkit.getPlayer(playerUuid)
-                if (onlinePlayer == null || !onlinePlayer.isOnline) {
-                    pickupLocation.world.dropItemNaturally(pickupLocation, stack)
-                    return@Runnable
-                }
-
-                val overflow = giveCollectedItem(onlinePlayer, stack)
-                for (item in overflow) {
-                    onlinePlayer.world.dropItemNaturally(onlinePlayer.location, item)
-                }
-
-                playFeedback(onlinePlayer.uniqueId, pickupLocation, "lom:sfx.clothingunequip")
-                logPickup(onlinePlayer, pickupLocation, stack)
-            } finally {
-                pendingPickupPairIds.remove(pairId)
-            }
-        })
+        pickupDisplay(player, target)
     }
 
     fun handlePlayerQuit(player: Player) {
@@ -165,25 +133,15 @@ internal class GroundItemManager(
     fun handlePlayerPickItem(event: PlayerPickItemEvent) {
         if (event.player.gameMode != GameMode.CREATIVE) return
 
-        val target = findPreciselyLookedAtGroundItem(event.player) ?: return
+        val target = findLookedAtGroundItem(event.player) ?: return
         event.isCancelled = true
         event.player.inventory.setItem(event.targetSlot, target.display.itemStack.clone())
         event.player.inventory.heldItemSlot = event.targetSlot
     }
 
-    fun findLookedAtInteraction(player: Player): Interaction? {
-        val result = player.world.rayTraceEntities(
-            player.eyeLocation,
-            player.eyeLocation.direction,
-            GroundItemConstants.INTERACTION_DISTANCE,
-            GroundItemConstants.RAYTRACE_SIZE,
-        ) { entity ->
-            entity is Interaction &&
-                persistence.isInteraction(entity) &&
-                !isPickupPending(persistence.getPairId(entity))
-        } ?: return null
-
-        return result.hitEntity as? Interaction
+    fun findLookedAtGroundItem(player: Player): GroundItemTarget? {
+        val hitPosition = findLookedAtBlockHitPosition(player) ?: return null
+        return findGroundItemNearHitPosition(player, hitPosition)
     }
 
     fun findPopLocation(player: Player): Location? {
@@ -206,62 +164,166 @@ internal class GroundItemManager(
         return targets.size
     }
 
-    fun resolveGroundItemTarget(entity: Entity): GroundItemTarget? {
-        return persistence.resolveTarget(entity)
+    fun startMigration(player: Player, dryRun: Boolean = false): Boolean {
+        if (activeMigration != null) {
+            player.sendMessage("A ground item migration is already running")
+            return false
+        }
+
+        val minChunk = Math.floorDiv(GroundItemConstants.MIGRATION_MIN_BLOCK, 16)
+        val maxChunk = Math.floorDiv(GroundItemConstants.MIGRATION_MAX_BLOCK, 16)
+        val chunkWidth = maxChunk - minChunk + 1
+        val totalChunkCount = chunkWidth * chunkWidth
+        val migration = MigrationState(
+            senderUuid = player.uniqueId,
+            worldUuid = player.world.uid,
+            dryRun = dryRun,
+            minChunk = minChunk,
+            maxChunk = maxChunk,
+            width = chunkWidth,
+            totalChunkCount = totalChunkCount,
+            startedAt = System.currentTimeMillis(),
+        )
+
+        activeMigration = migration
+        val modeLabel = if (dryRun) "dry migration" else "ground item migration"
+        player.sendMessage("Starting $modeLabel for chunk range $minChunk..$maxChunk in ${player.world.name}")
+        Bukkit.getScheduler().runTask(plugin, Runnable { runMigrationBatch(migration) })
+        return true
+    }
+
+    private fun runMigrationBatch(migration: MigrationState) {
+        if (activeMigration !== migration) return
+
+        val world = Bukkit.getWorld(migration.worldUuid)
+        if (world == null) {
+            finishMigration(migration, "Migration aborted because the world is no longer loaded")
+            return
+        }
+
+        repeat(GroundItemConstants.MIGRATION_BATCH_SIZE) {
+            val chunkCoordinates = migration.nextChunkCoordinates() ?: return@repeat
+            migrateChunk(migration, world, chunkCoordinates.first, chunkCoordinates.second)
+        }
+
+        maybeReportMigrationProgress(migration)
+
+        if (migration.isFinished) {
+            finishMigration(migration, null)
+            return
+        }
+
+        Bukkit.getScheduler().runTask(plugin, Runnable { runMigrationBatch(migration) })
+    }
+
+    private fun maybeReportMigrationProgress(migration: MigrationState) {
+        if (migration.visitedChunks == 0) return
+        if (migration.visitedChunks % GroundItemConstants.MIGRATION_PROGRESS_INTERVAL != 0) return
+
+        val sender = Bukkit.getPlayer(migration.senderUuid) ?: return
+        val modeLabel = if (migration.dryRun) "Dry migration" else "Migration"
+        sender.sendMessage(
+            "$modeLabel progress: ${migration.visitedChunks}/${migration.totalChunkCount} candidate chunks checked, " +
+                "${migration.processedChunks} chunks processed",
+        )
+    }
+
+    private fun finishMigration(migration: MigrationState, errorMessage: String?) {
+        if (activeMigration !== migration) return
+        activeMigration = null
+
+        val sender = Bukkit.getPlayer(migration.senderUuid)
+        if (errorMessage != null) {
+            sender?.sendMessage(errorMessage)
+            return
+        }
+
+        migration.finalizeInteractionCounts()
+        val elapsedMs = System.currentTimeMillis() - migration.startedAt
+        val modeLabel = if (migration.dryRun) "Dry migration finished" else "Migration finished"
+        val displayLabel = if (migration.dryRun) "displays needing migration" else "displays migrated"
+        val interactionLabel = if (migration.dryRun) "interactions that would be removed" else "interactions removed"
+        val orphanInteractionLabel = if (migration.dryRun) {
+            "orphan interactions that would be removed"
+        } else {
+            "orphan interactions removed"
+        }
+        sender?.sendMessage(
+            "$modeLabel: ${migration.processedChunks} chunks processed, " +
+                "${migration.displaysMigrated} $displayLabel, " +
+                "${migration.interactionsRemoved} $interactionLabel, " +
+                "${migration.orphanInteractionsRemoved} $orphanInteractionLabel, " +
+                "${elapsedMs}ms elapsed",
+        )
+    }
+
+    private fun migrateChunk(migration: MigrationState, world: World, chunkX: Int, chunkZ: Int) {
+        if (!world.isChunkGenerated(chunkX, chunkZ)) return
+
+        val wasLoaded = world.isChunkLoaded(chunkX, chunkZ)
+        if (!world.loadChunk(chunkX, chunkZ, false)) return
+
+        val chunk = world.getChunkAt(chunkX, chunkZ, false)
+        migration.processedChunks++
+
+        for (entity in chunk.entities) {
+            when {
+                entity is ItemDisplay && persistence.isGroundItemDisplay(entity) -> {
+                    migration.registerDisplay(entity.uniqueId)
+                    val changed = if (migration.dryRun) {
+                        persistence.needsLegacyDisplayCleanup(entity)
+                    } else {
+                        persistence.cleanupLegacyDisplay(entity)
+                    }
+                    if (changed) {
+                        migration.displaysMigrated++
+                    }
+                }
+
+                entity is Interaction && persistence.isLegacyInteraction(entity) -> {
+                    val partnerUuid = persistence.getLegacyPartnerUuid(entity)
+                    if (!migration.dryRun) {
+                        entity.remove()
+                    }
+                    migration.registerInteractionPartner(partnerUuid)
+                }
+            }
+        }
+
+        if (!wasLoaded) {
+            world.unloadChunk(chunkX, chunkZ, true)
+        }
     }
 
     private fun processChunk(chunk: Chunk) {
-        val processedPairs = mutableSetOf<String>()
-
         for (entity in chunk.entities) {
-            if (!persistence.isGroundItem(entity)) continue
+            if (entity !is ItemDisplay) continue
+            if (!persistence.isGroundItemDisplay(entity)) continue
 
-            val pairId = persistence.getPairId(entity)
-            if (pairId != null && !processedPairs.add(pairId)) continue
-
-            val target = persistence.resolveTarget(entity)
-            if (target == null) {
-                entity.remove()
-                continue
-            }
-
+            val target = persistence.resolveTarget(entity) ?: continue
             lockService.clearExpiredTemporaryLock(target)
-            placementService.syncInteractionToDisplay(target.display)
         }
     }
 
     private fun collectPopTargets(center: Location, radius: Double): List<GroundItemTarget> {
         val world = center.world ?: return emptyList()
         val radiusSquared = radius * radius
-        val processedPairs = mutableSetOf<String>()
-        val targets = mutableListOf<GroundItemTarget>()
 
-        for (entity in world.getNearbyEntities(center, radius, radius, radius)) {
-            if (!persistence.isGroundItem(entity)) continue
-
-            val pairId = persistence.getPairId(entity)
-            if (pairId != null && !processedPairs.add(pairId)) continue
-
-            val target = persistence.resolveTarget(entity)
-            if (target == null) {
-                entity.remove()
-                continue
-            }
-            if (isPickupPending(target.pairId)) continue
-            if (lockService.getLockMode(target) != LockMode.NONE) continue
-            if (target.display.location.world != world) continue
-            if (target.display.location.distanceSquared(center) > radiusSquared) continue
-
-            targets.add(target)
-        }
-
-        return targets
+        return world.getNearbyEntities(center, radius, radius, radius).asSequence()
+            .filterIsInstance<ItemDisplay>()
+            .filter(persistence::isGroundItemDisplay)
+            .mapNotNull(persistence::resolveTarget)
+            .filter { !isPickupPending(it.display.uniqueId) }
+            .filter { lockService.getLockMode(it) == LockMode.NONE }
+            .filter { it.display.location.world == world }
+            .filter { it.display.location.distanceSquared(center) <= radiusSquared }
+            .toList()
     }
 
     private fun popGroundItem(target: GroundItemTarget) {
         val stack = target.display.itemStack.clone()
         val dropLocation = target.display.location.clone()
-        persistence.removePair(target)
+        persistence.removeDisplay(target)
         dropLocation.world.dropItem(dropLocation, stack)
     }
 
@@ -298,39 +360,96 @@ internal class GroundItemManager(
         state.lastCreatedAt = System.currentTimeMillis()
     }
 
-    private fun findPreciselyLookedAtGroundItem(player: Player): GroundItemTarget? {
-        val eyeLocation = player.eyeLocation
-        val entityResult = player.world.rayTraceEntities(
-            eyeLocation,
-            eyeLocation.direction,
-            GroundItemConstants.INTERACTION_DISTANCE,
-            0.0,
-        ) { entity ->
-            entity is Interaction &&
-                persistence.isInteraction(entity) &&
-                !isPickupPending(persistence.getPairId(entity))
-        } ?: return null
+    private fun clickedHitPosition(event: PlayerInteractEvent): Location? {
+        return event.interactionPoint ?: findLookedAtBlockHitPosition(event.player)
+    }
 
-        val hitPosition = entityResult.hitPosition ?: return null
-        val hitInteraction = entityResult.hitEntity as? Interaction ?: return null
-        val blockResult = player.world.rayTraceBlocks(
-            eyeLocation,
-            eyeLocation.direction,
+    private fun findLookedAtBlockHitPosition(player: Player): Location? {
+        val result = player.world.rayTraceBlocks(
+            player.eyeLocation,
+            player.eyeLocation.direction,
             GroundItemConstants.INTERACTION_DISTANCE,
             FluidCollisionMode.NEVER,
             true,
-        )
+        ) ?: return null
 
-        val eyeVector = eyeLocation.toVector()
-        val entityDistanceSquared = hitPosition.distanceSquared(eyeVector)
-        val blockDistanceSquared = blockResult?.hitPosition?.distanceSquared(eyeVector)
-        if (blockDistanceSquared != null && blockDistanceSquared <= entityDistanceSquared) return null
-
-        return persistence.resolveTarget(hitInteraction)
+        return result.hitPosition?.toLocation(player.world)
     }
 
-    private fun isPickupPending(pairId: String?): Boolean {
-        return pairId != null && pairId in pendingPickupPairIds
+    private fun findGroundItemNearHitPosition(player: Player, hitPosition: Location): GroundItemTarget? {
+        val world = hitPosition.world ?: return null
+        val eyeLocation = player.eyeLocation
+
+        return world.getNearbyEntities(
+            hitPosition,
+            GroundItemConstants.MAX_SELECTION_RADIUS,
+            GroundItemConstants.MAX_SELECTION_RADIUS,
+            GroundItemConstants.MAX_SELECTION_RADIUS,
+        ).asSequence()
+            .filterIsInstance<ItemDisplay>()
+            .filter(persistence::isGroundItemDisplay)
+            .filter { !isPickupPending(it.uniqueId) }
+            .mapNotNull { display ->
+                val hitDistanceSquared = display.location.distanceSquared(hitPosition)
+                val selectionRadius = placementService.selectionRadiusForDisplay(display)
+                if (hitDistanceSquared > selectionRadius * selectionRadius) {
+                    return@mapNotNull null
+                }
+
+                DisplayCandidate(
+                    display = display,
+                    hitDistanceSquared = hitDistanceSquared,
+                    eyeDistanceSquared = display.location.distanceSquared(eyeLocation),
+                )
+            }
+            .minWithOrNull(
+                compareBy<DisplayCandidate>(
+                    { it.hitDistanceSquared },
+                    { it.eyeDistanceSquared },
+                    { it.display.uniqueId.toString() },
+                ),
+            )
+            ?.let { GroundItemTarget(it.display) }
+    }
+
+    private fun pickupDisplay(player: Player, target: GroundItemTarget) {
+        val displayUuid = target.display.uniqueId
+        if (!pendingPickupDisplayIds.add(displayUuid)) return
+
+        val playerUuid = player.uniqueId
+
+        Bukkit.getScheduler().runTask(plugin, Runnable {
+            try {
+                val display = persistence.resolveDisplay(displayUuid)
+                if (display == null || !persistence.isGroundItemDisplay(display)) {
+                    return@Runnable
+                }
+
+                val stack = display.itemStack.clone()
+                val pickupLocation = display.location.clone()
+                persistence.removeDisplay(display)
+
+                val onlinePlayer = Bukkit.getPlayer(playerUuid)
+                if (onlinePlayer == null || !onlinePlayer.isOnline) {
+                    pickupLocation.world.dropItemNaturally(pickupLocation, stack)
+                    return@Runnable
+                }
+
+                val overflow = giveCollectedItem(onlinePlayer, stack)
+                for (item in overflow) {
+                    onlinePlayer.world.dropItemNaturally(onlinePlayer.location, item)
+                }
+
+                playFeedback(onlinePlayer.uniqueId, pickupLocation, "lom:sfx.clothingunequip")
+                logPickup(onlinePlayer, pickupLocation, stack)
+            } finally {
+                pendingPickupDisplayIds.remove(displayUuid)
+            }
+        })
+    }
+
+    private fun isPickupPending(displayUuid: UUID): Boolean {
+        return displayUuid in pendingPickupDisplayIds
     }
 
     private fun isPickupAllowed(playerUuid: UUID, stack: ItemStack): Boolean {
@@ -387,6 +506,70 @@ internal class GroundItemManager(
             type == Material.WATER ||
             type == Material.LAVA ||
             type.name.endsWith("CAULDRON")
+    }
+
+    private data class DisplayCandidate(
+        val display: ItemDisplay,
+        val hitDistanceSquared: Double,
+        val eyeDistanceSquared: Double,
+    )
+
+    private data class MigrationState(
+        val senderUuid: UUID,
+        val worldUuid: UUID,
+        val dryRun: Boolean,
+        val minChunk: Int,
+        val maxChunk: Int,
+        val width: Int,
+        val totalChunkCount: Int,
+        val startedAt: Long,
+        var nextChunkIndex: Int = 0,
+        var visitedChunks: Int = 0,
+        var processedChunks: Int = 0,
+        var displaysMigrated: Int = 0,
+        var interactionsRemoved: Int = 0,
+        var orphanInteractionsRemoved: Int = 0,
+    ) {
+        private val migratedDisplayIds = mutableSetOf<UUID>()
+        private val unresolvedInteractionPartners = mutableMapOf<UUID, Int>()
+
+        val isFinished: Boolean
+            get() = nextChunkIndex >= totalChunkCount
+
+        fun nextChunkCoordinates(): Pair<Int, Int>? {
+            if (nextChunkIndex >= totalChunkCount) return null
+
+            val index = nextChunkIndex++
+            visitedChunks++
+            val x = minChunk + (index % width)
+            val z = minChunk + (index / width)
+            if (z > maxChunk) return null
+            return x to z
+        }
+
+        fun registerDisplay(displayUuid: UUID) {
+            if (!migratedDisplayIds.add(displayUuid)) return
+            interactionsRemoved += unresolvedInteractionPartners.remove(displayUuid) ?: 0
+        }
+
+        fun registerInteractionPartner(partnerUuid: UUID?) {
+            if (partnerUuid == null) {
+                orphanInteractionsRemoved++
+                return
+            }
+
+            if (partnerUuid in migratedDisplayIds) {
+                interactionsRemoved++
+                return
+            }
+
+            unresolvedInteractionPartners.merge(partnerUuid, 1, Int::plus)
+        }
+
+        fun finalizeInteractionCounts() {
+            orphanInteractionsRemoved += unresolvedInteractionPartners.values.sum()
+            unresolvedInteractionPartners.clear()
+        }
     }
 
     private data class PlayerRuntimeState(

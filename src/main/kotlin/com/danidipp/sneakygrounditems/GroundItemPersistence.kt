@@ -2,7 +2,6 @@ package com.danidipp.sneakygrounditems
 
 import org.bukkit.Bukkit
 import org.bukkit.NamespacedKey
-import org.bukkit.block.BlockFace
 import org.bukkit.entity.Entity
 import org.bukkit.entity.Interaction
 import org.bukkit.entity.ItemDisplay
@@ -26,53 +25,30 @@ internal class GroundItemPersistence(
     private val temporaryLockDateKey = NamespacedKey(plugin, "ground_item_temporary_lock_date")
     private val legacyTemporaryLockDateKey = legacyKey("ground_item_temporary_lock_date")
 
-    fun isInteraction(entity: Entity): Boolean {
-        return entity is Interaction && hasKind(entity, KIND_INTERACTION)
-    }
-
     fun isGroundItem(entity: Entity): Boolean {
         return hasString(entity, kindKey, legacyKindKey)
     }
 
+    fun isGroundItemDisplay(entity: Entity): Boolean {
+        return entity is ItemDisplay && hasKind(entity, KIND_DISPLAY)
+    }
+
+    fun isLegacyInteraction(entity: Entity): Boolean {
+        return entity is Interaction && hasKind(entity, KIND_INTERACTION)
+    }
+
     fun resolveTarget(entity: Entity): GroundItemTarget? {
-        val pairId = getPairId(entity) ?: return null
-        return when {
-            entity is Interaction && hasKind(entity, KIND_INTERACTION) -> {
-                val display = resolvePartner(entity, KIND_DISPLAY) as? ItemDisplay ?: return null
-                GroundItemTarget(display, entity, pairId)
-            }
-
-            entity is ItemDisplay && hasKind(entity, KIND_DISPLAY) -> {
-                val interaction = resolvePartner(entity, KIND_INTERACTION) as? Interaction ?: return null
-                GroundItemTarget(entity, interaction, pairId)
-            }
-
-            else -> null
+        return if (entity is ItemDisplay && hasKind(entity, KIND_DISPLAY)) {
+            GroundItemTarget(entity)
+        } else {
+            null
         }
     }
 
-    fun tagDisplay(display: ItemDisplay, pairId: String) {
-        tagEntity(display, KIND_DISPLAY, pairId)
-    }
-
-    fun tagInteraction(interaction: Interaction, pairId: String) {
-        tagEntity(interaction, KIND_INTERACTION, pairId)
-    }
-
-    fun linkPair(display: ItemDisplay, interaction: Interaction, face: BlockFace) {
-        setPartner(display, interaction.uniqueId)
-        setPartner(interaction, display.uniqueId)
-        setFace(display, face)
-        setFace(interaction, face)
-    }
-
-    fun getPairId(entity: Entity): String? {
-        return getString(entity, pairIdKey, legacyPairIdKey)
-    }
-
-    fun getStoredFace(entity: PersistentDataHolder): BlockFace? {
-        val faceName = getString(entity, faceKey, legacyFaceKey) ?: return null
-        return runCatching { BlockFace.valueOf(faceName) }.getOrNull()
+    fun tagDisplay(display: ItemDisplay) {
+        writeString(display, kindKey, KIND_DISPLAY)
+        removeString(display, legacyKindKey)
+        display.addScoreboardTag(GROUND_ITEM_TAG)
     }
 
     fun getLockMode(entity: PersistentDataHolder): LockMode {
@@ -89,24 +65,22 @@ internal class GroundItemPersistence(
 
     fun setPermanentLock(target: GroundItemTarget) {
         writeString(target.display, permanentLockModeKey, PERMANENT_LOCK_VALUE)
-        writeString(target.interaction, permanentLockModeKey, PERMANENT_LOCK_VALUE)
+        removeString(target.display, legacyPermanentLockModeKey)
         clearTemporaryLock(target)
     }
 
     fun setTemporaryLock(target: GroundItemTarget, date: String) {
         clearPermanentLock(target)
         writeString(target.display, temporaryLockDateKey, date)
-        writeString(target.interaction, temporaryLockDateKey, date)
+        removeString(target.display, legacyTemporaryLockDateKey)
     }
 
     fun clearTemporaryLock(target: GroundItemTarget) {
         removeString(target.display, temporaryLockDateKey, legacyTemporaryLockDateKey)
-        removeString(target.interaction, temporaryLockDateKey, legacyTemporaryLockDateKey)
     }
 
     fun clearPermanentLock(target: GroundItemTarget) {
         removeString(target.display, permanentLockModeKey, legacyPermanentLockModeKey)
-        removeString(target.interaction, permanentLockModeKey, legacyPermanentLockModeKey)
     }
 
     fun clearLock(target: GroundItemTarget) {
@@ -118,43 +92,57 @@ internal class GroundItemPersistence(
         return Bukkit.getEntity(uuid) as? ItemDisplay
     }
 
-    fun resolveInteraction(uuid: UUID): Interaction? {
-        return Bukkit.getEntity(uuid) as? Interaction
+    fun removeDisplay(target: GroundItemTarget) {
+        removeDisplay(target.display)
     }
 
-    fun removePair(target: GroundItemTarget) {
-        removePair(target.display, target.interaction)
-    }
-
-    fun removePair(display: ItemDisplay, interaction: Interaction) {
+    fun removeDisplay(display: ItemDisplay) {
         display.remove()
-        interaction.remove()
     }
 
-    private fun tagEntity(entity: PersistentDataHolder, kind: String, pairId: String) {
-        writeString(entity, kindKey, kind)
-        writeString(entity, pairIdKey, pairId)
-        writeString(entity, partnerUuidKey, "")
-        (entity as? Entity)?.addScoreboardTag(GROUND_ITEM_TAG)
+    fun cleanupLegacyDisplay(display: ItemDisplay): Boolean {
+        var changed = false
+        changed = migrateString(display, kindKey, legacyKindKey) || changed
+        changed = migrateString(display, permanentLockModeKey, legacyPermanentLockModeKey) || changed
+        changed = migrateString(display, temporaryLockDateKey, legacyTemporaryLockDateKey) || changed
+        if (!hasString(display, kindKey, legacyKindKey)) {
+            writeString(display, kindKey, KIND_DISPLAY)
+            changed = true
+        }
+        if (display.scoreboardTags.none { it == GROUND_ITEM_TAG }) {
+            display.addScoreboardTag(GROUND_ITEM_TAG)
+            changed = true
+        }
+        changed = removeString(display, legacyKindKey) || changed
+        changed = removeString(display, pairIdKey, legacyPairIdKey) || changed
+        changed = removeString(display, partnerUuidKey, legacyPartnerUuidKey) || changed
+        changed = removeString(display, faceKey, legacyFaceKey) || changed
+        return changed
     }
 
-    private fun setPartner(entity: PersistentDataHolder, partnerUuid: UUID) {
-        writeString(entity, partnerUuidKey, partnerUuid.toString())
+    fun needsLegacyDisplayCleanup(display: ItemDisplay): Boolean {
+        val data = display.persistentDataContainer
+        return (!data.has(kindKey, PersistentDataType.STRING) && data.has(legacyKindKey, PersistentDataType.STRING)) ||
+            (!data.has(permanentLockModeKey, PersistentDataType.STRING) && data.has(legacyPermanentLockModeKey, PersistentDataType.STRING)) ||
+            (!data.has(temporaryLockDateKey, PersistentDataType.STRING) && data.has(legacyTemporaryLockDateKey, PersistentDataType.STRING)) ||
+            !hasString(display, kindKey, legacyKindKey) ||
+            display.scoreboardTags.none { it == GROUND_ITEM_TAG } ||
+            data.has(legacyKindKey, PersistentDataType.STRING) ||
+            data.has(pairIdKey, PersistentDataType.STRING) ||
+            data.has(legacyPairIdKey, PersistentDataType.STRING) ||
+            data.has(partnerUuidKey, PersistentDataType.STRING) ||
+            data.has(legacyPartnerUuidKey, PersistentDataType.STRING) ||
+            data.has(faceKey, PersistentDataType.STRING) ||
+            data.has(legacyFaceKey, PersistentDataType.STRING)
     }
 
-    private fun setFace(entity: PersistentDataHolder, face: BlockFace) {
-        writeString(entity, faceKey, face.name)
+    fun getLegacyPartnerUuid(entity: PersistentDataHolder): UUID? {
+        val partnerId = getString(entity, partnerUuidKey, legacyPartnerUuidKey) ?: return null
+        return runCatching { UUID.fromString(partnerId) }.getOrNull()
     }
 
     private fun hasKind(entity: Entity, expectedKind: String): Boolean {
         return getString(entity, kindKey, legacyKindKey) == expectedKind
-    }
-
-    private fun resolvePartner(entity: Entity, expectedKind: String): Entity? {
-        val partnerId = getString(entity, partnerUuidKey, legacyPartnerUuidKey) ?: return null
-        val partnerUuid = runCatching { UUID.fromString(partnerId) }.getOrNull() ?: return null
-        val partner = Bukkit.getEntity(partnerUuid) ?: return null
-        return partner.takeIf { hasKind(it, expectedKind) }
     }
 
     private fun legacyKey(key: String): NamespacedKey {
@@ -168,14 +156,38 @@ internal class GroundItemPersistence(
     }
 
     private fun writeString(holder: PersistentDataHolder, key: NamespacedKey, value: String) {
-        val data = holder.persistentDataContainer
-        data.set(key, PersistentDataType.STRING, value)
+        holder.persistentDataContainer.set(key, PersistentDataType.STRING, value)
     }
 
-    private fun removeString(holder: PersistentDataHolder, key: NamespacedKey, legacyKey: NamespacedKey) {
+    private fun migrateString(holder: PersistentDataHolder, key: NamespacedKey, legacyKey: NamespacedKey): Boolean {
         val data = holder.persistentDataContainer
-        data.remove(key)
-        data.remove(legacyKey)
+        if (data.has(key, PersistentDataType.STRING)) return false
+
+        val legacyValue = data.get(legacyKey, PersistentDataType.STRING) ?: return false
+        data.set(key, PersistentDataType.STRING, legacyValue)
+        return true
+    }
+
+    private fun removeString(holder: PersistentDataHolder, key: NamespacedKey): Boolean {
+        val data = holder.persistentDataContainer
+        val hadValue = data.has(key, PersistentDataType.STRING)
+        if (hadValue) {
+            data.remove(key)
+        }
+        return hadValue
+    }
+
+    private fun removeString(holder: PersistentDataHolder, key: NamespacedKey, legacyKey: NamespacedKey): Boolean {
+        val data = holder.persistentDataContainer
+        val hadCurrentValue = data.has(key, PersistentDataType.STRING)
+        val hadLegacyValue = data.has(legacyKey, PersistentDataType.STRING)
+        if (hadCurrentValue) {
+            data.remove(key)
+        }
+        if (hadLegacyValue) {
+            data.remove(legacyKey)
+        }
+        return hadCurrentValue || hadLegacyValue
     }
 
     private fun hasString(holder: PersistentDataHolder, key: NamespacedKey, legacyKey: NamespacedKey): Boolean {

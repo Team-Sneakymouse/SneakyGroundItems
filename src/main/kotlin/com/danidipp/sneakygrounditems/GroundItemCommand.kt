@@ -31,10 +31,11 @@ internal class GroundItemCommand(
                     GroundItemPermissions.hasPopPermission(source.sender) ||
                     GroundItemPermissions.hasAdminPermission(source.sender)
             }
-            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop> ...") }
+            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|migrate> ...") }
             .then(buildLockCommand())
             .then(buildUnlockCommand())
             .then(buildPopCommand())
+            .then(buildMigrateCommand())
             .build()
 
     private fun buildLockCommand(): LiteralArgumentBuilder<CommandSourceStack> =
@@ -68,6 +69,15 @@ internal class GroundItemCommand(
             .requires { GroundItemPermissions.hasPopPermission(it.sender) }
             .then(buildPopRaycastCommand())
             .then(buildPopCoordinatesCommand())
+
+    private fun buildMigrateCommand(): LiteralArgumentBuilder<CommandSourceStack> =
+        Commands.literal("migrate")
+            .requires { GroundItemPermissions.hasAdminPermission(it.sender) }
+            .executes { migrate(it, dryRun = false) }
+            .then(
+                Commands.literal("dry")
+                    .executes { migrate(it, dryRun = true) }
+            )
 
     private fun buildPopRaycastCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("raycast")
@@ -110,10 +120,8 @@ internal class GroundItemCommand(
     private fun lockOrUnlock(context: CommandContext<CommandSourceStack>, lock: Boolean, targetName: String?): Int {
         val sender = context.source.sender
         val targetedPlayer = resolveTargetPlayer(sender, targetName) ?: return 0
-        val lookedAtInteraction = manager.findLookedAtInteraction(targetedPlayer)
+        val target = manager.findLookedAtGroundItem(targetedPlayer)
             ?: return fail(context, "Target player is not looking at a ground item")
-        val target = manager.resolveGroundItemTarget(lookedAtInteraction)
-            ?: return fail(context, "Ground item pair is invalid")
 
         if (lock) {
             if (lockService.getLockMode(target) != LockMode.NONE) {
@@ -135,6 +143,11 @@ internal class GroundItemCommand(
         }
 
         return Command.SINGLE_SUCCESS
+    }
+
+    private fun migrate(context: CommandContext<CommandSourceStack>, dryRun: Boolean): Int {
+        val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem migrate")
+        return if (manager.startMigration(player, dryRun)) Command.SINGLE_SUCCESS else 0
     }
 
     private fun popRaycast(context: CommandContext<CommandSourceStack>, radius: Double): Int {
