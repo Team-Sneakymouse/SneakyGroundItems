@@ -15,14 +15,14 @@ class SneakyGroundItems : JavaPlugin(), Listener {
     private lateinit var groundItemManager: GroundItemManager
 
     override fun onEnable() {
-        val persistence = GroundItemPersistence(this)
-        val lockService = GroundItemLockService(persistence)
+        val persistence = PersistenceService(this)
+        val lockService = LockService(persistence)
         groundItemManager = GroundItemManager(this, persistence, lockService)
         groundItemManager.processLoadedChunks()
 
         lifecycleManager.registerEventHandler(LifecycleEvents.COMMANDS) { event ->
             event.registrar().register(
-                GroundItemCommand(groundItemManager, lockService).build(),
+                Command(groundItemManager, lockService).build(),
                 "Lock, unlock, pop, or migrate placed ground items",
             )
         }

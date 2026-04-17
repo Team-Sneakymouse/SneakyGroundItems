@@ -1,6 +1,6 @@
 package com.danidipp.sneakygrounditems
 
-object GroundItemConstants {
+object Constants {
     const val INTERACTION_DISTANCE = 2.5
     const val POP_RAYCAST_DISTANCE = 8.0
     const val SURFACE_EPSILON = 0.02

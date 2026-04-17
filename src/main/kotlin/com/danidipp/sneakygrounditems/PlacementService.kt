@@ -12,9 +12,9 @@ import org.joml.Quaternionf
 import org.joml.Vector3f
 import java.util.concurrent.ThreadLocalRandom
 
-internal class GroundItemPlacementService(
-    private val persistence: GroundItemPersistence,
-    private val lockService: GroundItemLockService,
+internal class PlacementService(
+    private val persistence: PersistenceService,
+    private val lockService: LockService,
 ) {
     private val groundItemMinScaleKey = NamespacedKey.fromString("magicspells:magicspellpermanentdata_grounditem_min_scale")
         ?: throw IllegalStateException("Failed to create NamespacedKey for magicspells:magicspellpermanentdata_grounditem_min_scale")
@@ -24,9 +24,9 @@ internal class GroundItemPlacementService(
     fun buildPlacement(playerYaw: Float, hitPosition: Location, hitFace: BlockFace, stack: ItemStack): Placement {
         val normal = hitFace.direction.clone().normalize()
         val stackScale = scaleForStack(stack)
-        val randomOffset = ThreadLocalRandom.current().nextDouble(0.0, GroundItemConstants.SURFACE_RANDOM_OFFSET)
+        val randomOffset = ThreadLocalRandom.current().nextDouble(0.0, Constants.SURFACE_RANDOM_OFFSET)
         val anchor = hitPosition.clone()
-            .add(normal.clone().multiply(GroundItemConstants.SURFACE_EPSILON))
+            .add(normal.clone().multiply(Constants.SURFACE_EPSILON))
             .add(normal.clone().multiply(randomOffset))
 
         return Placement(
@@ -79,24 +79,23 @@ internal class GroundItemPlacementService(
 
     fun selectionRadiusForDisplay(display: ItemDisplay): Double {
         return (scaleForStack(display.itemStack) / 2.0f)
-            .coerceIn(GroundItemConstants.MIN_SELECTION_RADIUS.toFloat(), GroundItemConstants.MAX_SELECTION_RADIUS.toFloat())
+            .coerceIn(Constants.MIN_SELECTION_RADIUS.toFloat(), Constants.MAX_SELECTION_RADIUS.toFloat())
             .toDouble()
     }
 
     private fun findMergeTarget(location: Location, stack: ItemStack): ItemDisplay? {
         return location.world.getNearbyEntities(
             location,
-            GroundItemConstants.MERGE_SEARCH_RADIUS,
-            GroundItemConstants.MERGE_SEARCH_RADIUS,
-            GroundItemConstants.MERGE_SEARCH_RADIUS,
+            Constants.MERGE_SEARCH_RADIUS,
+            Constants.MERGE_SEARCH_RADIUS,
+            Constants.MERGE_SEARCH_RADIUS,
         ).asSequence()
             .filterIsInstance<ItemDisplay>()
-            .mapNotNull(persistence::resolveTarget)
-            .filter { lockService.getLockMode(it) == LockMode.NONE }
-            .filter { it.display.itemStack.isSimilar(stack) }
-            .filter { it.display.itemStack.amount < it.display.itemStack.maxStackSize.coerceAtLeast(1) }
-            .minByOrNull { it.display.location.distanceSquared(location) }
-            ?.display
+            .filter(persistence::isGroundItemDisplay)
+            .filter { lockService.getLockMode(it) == LockService.LockMode.NONE }
+            .filter { it.itemStack.isSimilar(stack) }
+            .filter { it.itemStack.amount < it.itemStack.maxStackSize.coerceAtLeast(1) }
+            .minByOrNull { it.location.distanceSquared(location) }
     }
 
     private fun rescaleTransformation(existing: Transformation, stackScale: Float): Transformation {
@@ -144,8 +143,8 @@ internal class GroundItemPlacementService(
     }
 
     private fun resolveGroundItemScaleRange(stack: ItemStack): ScaleRange {
-        val minScale = readScaleOverride(stack, groundItemMinScaleKey, GroundItemConstants.DEFAULT_MIN_SCALE)
-        val maxScale = readScaleOverride(stack, groundItemMaxScaleKey, GroundItemConstants.DEFAULT_MAX_SCALE)
+        val minScale = readScaleOverride(stack, groundItemMinScaleKey, Constants.DEFAULT_MIN_SCALE)
+        val maxScale = readScaleOverride(stack, groundItemMaxScaleKey, Constants.DEFAULT_MAX_SCALE)
 
         return if (maxScale < minScale) {
             ScaleRange(maxScale, minScale)

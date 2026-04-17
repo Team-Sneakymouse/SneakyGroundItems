@@ -9,9 +9,7 @@ import org.bukkit.persistence.PersistentDataHolder
 import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
 
-internal class GroundItemPersistence(
-    plugin: SneakyGroundItems,
-) {
+internal class PersistenceService(plugin: SneakyGroundItems) {
     private val kindKey = NamespacedKey(plugin, "ground_item_kind")
     private val legacyKindKey = legacyKey("ground_item_kind")
     private val pairIdKey = NamespacedKey(plugin, "ground_item_pair_id")
@@ -37,25 +35,17 @@ internal class GroundItemPersistence(
         return entity is Interaction && hasKind(entity, KIND_INTERACTION)
     }
 
-    fun resolveTarget(entity: Entity): GroundItemTarget? {
-        return if (entity is ItemDisplay && hasKind(entity, KIND_DISPLAY)) {
-            GroundItemTarget(entity)
-        } else {
-            null
-        }
-    }
-
     fun tagDisplay(display: ItemDisplay) {
         writeString(display, kindKey, KIND_DISPLAY)
         removeString(display, legacyKindKey)
         display.addScoreboardTag(GROUND_ITEM_TAG)
     }
 
-    fun getLockMode(entity: PersistentDataHolder): LockMode {
+    fun getLockMode(entity: PersistentDataHolder): LockService.LockMode {
         return when {
-            getString(entity, permanentLockModeKey, legacyPermanentLockModeKey) == PERMANENT_LOCK_VALUE -> LockMode.PERMANENT
-            getString(entity, temporaryLockDateKey, legacyTemporaryLockDateKey) != null -> LockMode.TEMPORARY
-            else -> LockMode.NONE
+            getString(entity, permanentLockModeKey, legacyPermanentLockModeKey) == PERMANENT_LOCK_VALUE -> LockService.LockMode.PERMANENT
+            getString(entity, temporaryLockDateKey, legacyTemporaryLockDateKey) != null -> LockService.LockMode.TEMPORARY
+            else -> LockService.LockMode.NONE
         }
     }
 
@@ -63,37 +53,33 @@ internal class GroundItemPersistence(
         return getString(entity, temporaryLockDateKey, legacyTemporaryLockDateKey)
     }
 
-    fun setPermanentLock(target: GroundItemTarget) {
-        writeString(target.display, permanentLockModeKey, PERMANENT_LOCK_VALUE)
-        removeString(target.display, legacyPermanentLockModeKey)
-        clearTemporaryLock(target)
+    fun setPermanentLock(display: ItemDisplay) {
+        writeString(display, permanentLockModeKey, PERMANENT_LOCK_VALUE)
+        removeString(display, legacyPermanentLockModeKey)
+        clearTemporaryLock(display)
     }
 
-    fun setTemporaryLock(target: GroundItemTarget, date: String) {
-        clearPermanentLock(target)
-        writeString(target.display, temporaryLockDateKey, date)
-        removeString(target.display, legacyTemporaryLockDateKey)
+    fun setTemporaryLock(display: ItemDisplay, date: String) {
+        clearPermanentLock(display)
+        writeString(display, temporaryLockDateKey, date)
+        removeString(display, legacyTemporaryLockDateKey)
     }
 
-    fun clearTemporaryLock(target: GroundItemTarget) {
-        removeString(target.display, temporaryLockDateKey, legacyTemporaryLockDateKey)
+    fun clearTemporaryLock(display: ItemDisplay) {
+        removeString(display, temporaryLockDateKey, legacyTemporaryLockDateKey)
     }
 
-    fun clearPermanentLock(target: GroundItemTarget) {
-        removeString(target.display, permanentLockModeKey, legacyPermanentLockModeKey)
+    fun clearPermanentLock(display: ItemDisplay) {
+        removeString(display, permanentLockModeKey, legacyPermanentLockModeKey)
     }
 
-    fun clearLock(target: GroundItemTarget) {
-        clearPermanentLock(target)
-        clearTemporaryLock(target)
+    fun clearLock(display: ItemDisplay) {
+        clearPermanentLock(display)
+        clearTemporaryLock(display)
     }
 
     fun resolveDisplay(uuid: UUID): ItemDisplay? {
         return Bukkit.getEntity(uuid) as? ItemDisplay
-    }
-
-    fun removeDisplay(target: GroundItemTarget) {
-        removeDisplay(target.display)
     }
 
     fun removeDisplay(display: ItemDisplay) {

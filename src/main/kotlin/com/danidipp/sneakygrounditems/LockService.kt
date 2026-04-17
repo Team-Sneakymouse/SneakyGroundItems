@@ -9,50 +9,57 @@ import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.command.CommandSender
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import java.time.LocalDate
 import java.time.ZoneId
 
-internal class GroundItemLockService(
-    private val persistence: GroundItemPersistence,
+internal class LockService(
+    private val persistence: PersistenceService,
 ) {
+    enum class LockMode {
+        NONE,
+        TEMPORARY,
+        PERMANENT,
+    }
+
     private val lockZone = ZoneId.of("UTC-07:00")
 
-    fun lockTarget(actor: CommandSender, target: GroundItemTarget): LockMode {
-        return when (determineLockMode(actor, target.display.location)) {
+    fun lockTarget(actor: CommandSender, display: ItemDisplay): LockMode {
+        return when (determineLockMode(actor, display.location)) {
             LockMode.PERMANENT -> {
-                persistence.setPermanentLock(target)
+                persistence.setPermanentLock(display)
                 LockMode.PERMANENT
             }
 
             else -> {
-                persistence.setTemporaryLock(target, todayLockDate())
+                persistence.setTemporaryLock(display, todayLockDate())
                 LockMode.TEMPORARY
             }
         }
     }
 
-    fun getLockMode(target: GroundItemTarget): LockMode {
-        return persistence.getLockMode(target.display)
+    fun getLockMode(display: ItemDisplay): LockMode {
+        return persistence.getLockMode(display)
     }
 
-    fun canUnlock(actor: CommandSender, target: GroundItemTarget): Boolean {
-        if (actor.hasPermission(GroundItemCommand.ADMIN_PERMISSION)) return true
+    fun canUnlock(actor: CommandSender, display: ItemDisplay): Boolean {
+        if (actor.hasPermission(Command.ADMIN_PERMISSION)) return true
 
         val player = actor as? Player ?: return false
-        return isPlotMember(player, target.display.location)
+        return isPlotMember(player, display.location)
     }
 
-    fun unlockTarget(target: GroundItemTarget) {
-        persistence.clearLock(target)
+    fun unlockTarget(display: ItemDisplay) {
+        persistence.clearLock(display)
     }
 
-    fun clearExpiredTemporaryLock(target: GroundItemTarget) {
-        val temporaryDate = persistence.getTemporaryLockDate(target.display) ?: return
+    fun clearExpiredTemporaryLock(display: ItemDisplay) {
+        val temporaryDate = persistence.getTemporaryLockDate(display) ?: return
         if (temporaryDate == todayLockDate()) return
 
-        persistence.clearTemporaryLock(target)
+        persistence.clearTemporaryLock(display)
     }
 
     fun formatBoundMessage(stack: ItemStack, temporary: Boolean): Component {
@@ -81,7 +88,7 @@ internal class GroundItemLockService(
         if (player != null && isPlotMember(player, location)) {
             return LockMode.PERMANENT
         }
-        if (actor.hasPermission(GroundItemCommand.ADMIN_PERMISSION) && player?.gameMode == GameMode.CREATIVE) {
+        if (actor.hasPermission(Command.ADMIN_PERMISSION) && player?.gameMode == GameMode.CREATIVE) {
             return LockMode.PERMANENT
         }
         return LockMode.TEMPORARY

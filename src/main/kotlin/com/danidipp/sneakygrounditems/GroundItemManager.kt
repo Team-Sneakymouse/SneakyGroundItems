@@ -32,10 +32,10 @@ import java.util.UUID
 
 internal class GroundItemManager(
     private val plugin: SneakyGroundItems,
-    private val persistence: GroundItemPersistence,
-    private val lockService: GroundItemLockService,
+    private val persistence: PersistenceService,
+    private val lockService: LockService,
 ) {
-    private val placementService = GroundItemPlacementService(persistence, lockService)
+    private val placementService = PlacementService(persistence, lockService)
     private val soulboundOwnerKey = NamespacedKey.fromString("magicspells:soulbound_owner")
         ?: throw IllegalStateException("Failed to create NamespacedKey for magicspells:soulbound_owner")
     private val pendingPickupDisplayIds = mutableSetOf<UUID>()
@@ -63,7 +63,7 @@ internal class GroundItemManager(
         val forbiddenHit = world.rayTraceBlocks(
             eyeLocation,
             eyeLocation.direction,
-            GroundItemConstants.INTERACTION_DISTANCE,
+            Constants.INTERACTION_DISTANCE,
             FluidCollisionMode.ALWAYS,
             false,
         )
@@ -72,7 +72,7 @@ internal class GroundItemManager(
         val result = world.rayTraceBlocks(
             eyeLocation,
             eyeLocation.direction,
-            GroundItemConstants.INTERACTION_DISTANCE,
+            Constants.INTERACTION_DISTANCE,
             FluidCollisionMode.NEVER,
             true,
         ) ?: return
@@ -108,18 +108,18 @@ internal class GroundItemManager(
 
         val player = event.player
         val hitPosition = clickedHitPosition(event) ?: return
-        val target = findGroundItemNearHitPosition(player, hitPosition) ?: return
+        val display = findGroundItemNearHitPosition(player, hitPosition) ?: return
 
         event.setUseInteractedBlock(Result.DENY)
         event.setUseItemInHand(Result.DENY)
         event.setCancelled(true)
 
-        if (lockService.getLockMode(target) != LockMode.NONE) {
-            player.playEffect(target.display.location, Effect.SMOKE, BlockFace.UP)
+        if (lockService.getLockMode(display) != LockService.LockMode.NONE) {
+            player.playEffect(display.location, Effect.SMOKE, BlockFace.UP)
             return
         }
-        if (!isPickupAllowed(player.uniqueId, target.display.itemStack)) return
-        pickupDisplay(player, target)
+        if (!isPickupAllowed(player.uniqueId, display.itemStack)) return
+        pickupDisplay(player, display)
     }
 
     fun handlePlayerQuit(player: Player) {
@@ -133,13 +133,13 @@ internal class GroundItemManager(
     fun handlePlayerPickItem(event: PlayerPickItemEvent) {
         if (event.player.gameMode != GameMode.CREATIVE) return
 
-        val target = findLookedAtGroundItem(event.player) ?: return
+        val display = findLookedAtGroundItem(event.player) ?: return
         event.isCancelled = true
-        event.player.inventory.setItem(event.targetSlot, target.display.itemStack.clone())
+        event.player.inventory.setItem(event.targetSlot, display.itemStack.clone())
         event.player.inventory.heldItemSlot = event.targetSlot
     }
 
-    fun findLookedAtGroundItem(player: Player): GroundItemTarget? {
+    fun findLookedAtGroundItem(player: Player): ItemDisplay? {
         val hitPosition = findLookedAtBlockHitPosition(player) ?: return null
         return findGroundItemNearHitPosition(player, hitPosition)
     }
@@ -148,7 +148,7 @@ internal class GroundItemManager(
         val result = player.world.rayTraceBlocks(
             player.eyeLocation,
             player.eyeLocation.direction,
-            GroundItemConstants.POP_RAYCAST_DISTANCE,
+            Constants.POP_RAYCAST_DISTANCE,
             FluidCollisionMode.NEVER,
             true,
         ) ?: return null
@@ -170,8 +170,8 @@ internal class GroundItemManager(
             return false
         }
 
-        val minChunk = Math.floorDiv(GroundItemConstants.MIGRATION_MIN_BLOCK, 16)
-        val maxChunk = Math.floorDiv(GroundItemConstants.MIGRATION_MAX_BLOCK, 16)
+        val minChunk = Math.floorDiv(Constants.MIGRATION_MIN_BLOCK, 16)
+        val maxChunk = Math.floorDiv(Constants.MIGRATION_MAX_BLOCK, 16)
         val chunkWidth = maxChunk - minChunk + 1
         val totalChunkCount = chunkWidth * chunkWidth
         val migration = MigrationState(
@@ -201,7 +201,7 @@ internal class GroundItemManager(
             return
         }
 
-        repeat(GroundItemConstants.MIGRATION_BATCH_SIZE) {
+        repeat(Constants.MIGRATION_BATCH_SIZE) {
             val chunkCoordinates = migration.nextChunkCoordinates() ?: return@repeat
             migrateChunk(migration, world, chunkCoordinates.first, chunkCoordinates.second)
         }
@@ -218,7 +218,7 @@ internal class GroundItemManager(
 
     private fun maybeReportMigrationProgress(migration: MigrationState) {
         if (migration.visitedChunks == 0) return
-        if (migration.visitedChunks % GroundItemConstants.MIGRATION_PROGRESS_INTERVAL != 0) return
+        if (migration.visitedChunks % Constants.MIGRATION_PROGRESS_INTERVAL != 0) return
 
         val sender = Bukkit.getPlayer(migration.senderUuid) ?: return
         val modeLabel = if (migration.dryRun) "Dry migration" else "Migration"
@@ -300,37 +300,35 @@ internal class GroundItemManager(
             if (entity !is ItemDisplay) continue
             if (!persistence.isGroundItemDisplay(entity)) continue
 
-            val target = persistence.resolveTarget(entity) ?: continue
-            lockService.clearExpiredTemporaryLock(target)
+            lockService.clearExpiredTemporaryLock(entity)
         }
     }
 
-    private fun collectPopTargets(center: Location, radius: Double): List<GroundItemTarget> {
+    private fun collectPopTargets(center: Location, radius: Double): List<ItemDisplay> {
         val world = center.world ?: return emptyList()
         val radiusSquared = radius * radius
 
         return world.getNearbyEntities(center, radius, radius, radius).asSequence()
             .filterIsInstance<ItemDisplay>()
             .filter(persistence::isGroundItemDisplay)
-            .mapNotNull(persistence::resolveTarget)
-            .filter { !isPickupPending(it.display.uniqueId) }
-            .filter { lockService.getLockMode(it) == LockMode.NONE }
-            .filter { it.display.location.world == world }
-            .filter { it.display.location.distanceSquared(center) <= radiusSquared }
+            .filter { !isPickupPending(it.uniqueId) }
+            .filter { lockService.getLockMode(it) == LockService.LockMode.NONE }
+            .filter { it.location.world == world }
+            .filter { it.location.distanceSquared(center) <= radiusSquared }
             .toList()
     }
 
-    private fun popGroundItem(target: GroundItemTarget) {
-        val stack = target.display.itemStack.clone()
-        val dropLocation = target.display.location.clone()
-        persistence.removeDisplay(target)
+    private fun popGroundItem(display: ItemDisplay) {
+        val stack = display.itemStack.clone()
+        val dropLocation = display.location.clone()
+        persistence.removeDisplay(display)
         dropLocation.world.dropItem(dropLocation, stack)
     }
 
     private fun finishMerge(
         event: PlayerDropItemEvent,
         droppedStack: ItemStack,
-        mergeResult: GroundItemPlacementService.MergeResult,
+        mergeResult: PlacementService.MergeResult,
     ) {
         playFeedback(event.player.uniqueId, mergeResult.display.location, "lom:sfx.clothingequip")
         logDrop(
@@ -352,7 +350,7 @@ internal class GroundItemManager(
 
     private fun canCreateGroundItem(playerId: UUID): Boolean {
         val state = playerStateById[playerId] ?: return true
-        return System.currentTimeMillis() - state.lastCreatedAt >= GroundItemConstants.ACTION_COOLDOWN_MS
+        return System.currentTimeMillis() - state.lastCreatedAt >= Constants.ACTION_COOLDOWN_MS
     }
 
     private fun markGroundItemCreated(playerId: UUID) {
@@ -368,7 +366,7 @@ internal class GroundItemManager(
         val result = player.world.rayTraceBlocks(
             player.eyeLocation,
             player.eyeLocation.direction,
-            GroundItemConstants.INTERACTION_DISTANCE,
+            Constants.INTERACTION_DISTANCE,
             FluidCollisionMode.NEVER,
             true,
         ) ?: return null
@@ -376,15 +374,15 @@ internal class GroundItemManager(
         return result.hitPosition?.toLocation(player.world)
     }
 
-    private fun findGroundItemNearHitPosition(player: Player, hitPosition: Location): GroundItemTarget? {
+    private fun findGroundItemNearHitPosition(player: Player, hitPosition: Location): ItemDisplay? {
         val world = hitPosition.world ?: return null
         val eyeLocation = player.eyeLocation
 
         return world.getNearbyEntities(
             hitPosition,
-            GroundItemConstants.MAX_SELECTION_RADIUS,
-            GroundItemConstants.MAX_SELECTION_RADIUS,
-            GroundItemConstants.MAX_SELECTION_RADIUS,
+            Constants.MAX_SELECTION_RADIUS,
+            Constants.MAX_SELECTION_RADIUS,
+            Constants.MAX_SELECTION_RADIUS,
         ).asSequence()
             .filterIsInstance<ItemDisplay>()
             .filter(persistence::isGroundItemDisplay)
@@ -409,11 +407,11 @@ internal class GroundItemManager(
                     { it.display.uniqueId.toString() },
                 ),
             )
-            ?.let { GroundItemTarget(it.display) }
+            ?.display
     }
 
-    private fun pickupDisplay(player: Player, target: GroundItemTarget) {
-        val displayUuid = target.display.uniqueId
+    private fun pickupDisplay(player: Player, display: ItemDisplay) {
+        val displayUuid = display.uniqueId
         if (!pendingPickupDisplayIds.add(displayUuid)) return
 
         val playerUuid = player.uniqueId
@@ -477,7 +475,7 @@ internal class GroundItemManager(
 
         val now = System.currentTimeMillis()
         val state = playerStateById.getOrPut(playerId, ::PlayerRuntimeState)
-        if (now - state.lastFeedbackAt < GroundItemConstants.ACTION_COOLDOWN_MS) return
+        if (now - state.lastFeedbackAt < Constants.ACTION_COOLDOWN_MS) return
 
         state.lastFeedbackAt = now
         location.world.playSound(location, sound, SoundCategory.MASTER, 0.25f, 1.75f)

@@ -15,9 +15,9 @@ import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 
-internal class GroundItemCommand(
+internal class Command(
     private val manager: GroundItemManager,
-    private val lockService: GroundItemLockService,
+    private val lockService: LockService,
 ) {
     private val playerSuggestions = SuggestionProvider<CommandSourceStack> { _, builder ->
         suggest(Bukkit.getOnlinePlayers().map { it.name }.sorted(), builder)
@@ -111,26 +111,31 @@ internal class GroundItemCommand(
     private fun lockOrUnlock(context: CommandContext<CommandSourceStack>, lock: Boolean, targetName: String?): Int {
         val sender = context.source.sender
         val targetedPlayer = resolveTargetPlayer(sender, targetName) ?: return 0
-        val target = manager.findLookedAtGroundItem(targetedPlayer)
+        val display = manager.findLookedAtGroundItem(targetedPlayer)
             ?: return fail(context, "Target player is not looking at a ground item")
 
         if (lock) {
-            if (lockService.getLockMode(target) != LockMode.NONE) {
-                sender.sendMessage(lockService.formatAlreadyBoundMessage(target.display.itemStack))
+            if (lockService.getLockMode(display) != LockService.LockMode.NONE) {
+                sender.sendMessage(lockService.formatAlreadyBoundMessage(display.itemStack))
                 return Command.SINGLE_SUCCESS
             }
-            val lockMode = lockService.lockTarget(sender, target)
-            sender.sendMessage(lockService.formatBoundMessage(target.display.itemStack, lockMode == LockMode.TEMPORARY))
+            val lockMode = lockService.lockTarget(sender, display)
+            sender.sendMessage(
+                lockService.formatBoundMessage(
+                    display.itemStack,
+                    lockMode == LockService.LockMode.TEMPORARY,
+                ),
+            )
         } else {
-            if (lockService.getLockMode(target) == LockMode.NONE) {
-                sender.sendMessage(lockService.formatAlreadyUnboundMessage(target.display.itemStack))
+            if (lockService.getLockMode(display) == LockService.LockMode.NONE) {
+                sender.sendMessage(lockService.formatAlreadyUnboundMessage(display.itemStack))
                 return Command.SINGLE_SUCCESS
             }
-            if (!lockService.canUnlock(sender, target)) {
+            if (!lockService.canUnlock(sender, display)) {
                 return fail(context, "You may not unlock this ground item")
             }
-            lockService.unlockTarget(target)
-            sender.sendMessage(lockService.formatUnboundMessage(target.display.itemStack))
+            lockService.unlockTarget(display)
+            sender.sendMessage(lockService.formatUnboundMessage(display.itemStack))
         }
 
         return Command.SINGLE_SUCCESS
