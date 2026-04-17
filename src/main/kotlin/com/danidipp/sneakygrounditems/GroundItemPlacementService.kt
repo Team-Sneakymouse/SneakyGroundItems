@@ -30,7 +30,7 @@ internal class GroundItemPlacementService(
         val anchor = hitPosition.clone()
             .add(normal.clone().multiply(GroundItemConstants.SURFACE_EPSILON))
             .add(normal.clone().multiply(randomOffset))
-        val interactionLocation = anchor.clone().add(normal.clone().multiply(interactionNormalOffset(stackScale).toDouble()))
+        val interactionLocation = interactionLocationForFace(anchor, hitFace, stackScale)
 
         return Placement(
             location = anchor,
@@ -100,6 +100,10 @@ internal class GroundItemPlacementService(
         )
     }
 
+    fun syncInteractionToDisplay(display: ItemDisplay) {
+        updateInteractionForDisplayScale(display, scaleForStack(display.itemStack))
+    }
+
     private fun findMergeTarget(location: Location, stack: ItemStack): ItemDisplay? {
         return location.world.getNearbyEntities(
             location,
@@ -122,8 +126,7 @@ internal class GroundItemPlacementService(
         target.interaction.interactionHeight = stackScale
 
         val face = persistence.getStoredFace(display) ?: return
-        val normal = face.direction.clone().normalize()
-        target.interaction.teleport(display.location.clone().add(normal.multiply(interactionNormalOffset(stackScale).toDouble())))
+        target.interaction.teleport(interactionLocationForFace(display.location, face, stackScale))
     }
 
     private fun rescaleTransformation(existing: Transformation, stackScale: Float): Transformation {
@@ -189,8 +192,17 @@ internal class GroundItemPlacementService(
         return parsedValue.coerceAtLeast(0.0f)
     }
 
-    private fun interactionNormalOffset(stackScale: Float): Float {
-        return maxOf(0.0f, (stackScale - 0.5f) * 0.5f)
+    private fun interactionLocationForFace(anchor: Location, face: BlockFace, stackScale: Float): Location {
+        val scale = stackScale.toDouble()
+        return when (face) {
+            BlockFace.UP -> anchor.clone()
+            BlockFace.DOWN -> anchor.clone().subtract(0.0, scale, 0.0)
+            BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST -> anchor.clone()
+                .add(face.direction.clone().normalize().multiply(scale / 2.0))
+                .subtract(0.0, scale / 2.0, 0.0)
+
+            else -> anchor.clone()
+        }
     }
 
     internal data class Placement(

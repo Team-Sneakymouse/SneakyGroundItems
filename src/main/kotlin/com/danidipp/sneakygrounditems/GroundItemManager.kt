@@ -226,6 +226,7 @@ internal class GroundItemManager(
             }
 
             lockService.clearExpiredTemporaryLock(target)
+            placementService.syncInteractionToDisplay(target.display)
         }
     }
 
