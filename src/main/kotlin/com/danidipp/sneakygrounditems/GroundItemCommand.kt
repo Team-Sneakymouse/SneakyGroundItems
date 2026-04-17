@@ -1,4 +1,4 @@
-package com.danidipp.sneakygrounditems.grounditems
+package com.danidipp.sneakygrounditems
 
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.DoubleArgumentType
@@ -15,8 +15,9 @@ import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 
-class GroundItemCommand(
-    private val module: GroundItemsModule,
+internal class GroundItemCommand(
+    private val manager: GroundItemManager,
+    private val lockService: GroundItemLockService,
 ) {
     private val playerSuggestions = SuggestionProvider<CommandSourceStack> { _, builder ->
         suggest(Bukkit.getOnlinePlayers().map { it.name }.sorted(), builder)
@@ -25,10 +26,10 @@ class GroundItemCommand(
     fun build(): LiteralCommandNode<CommandSourceStack> =
         Commands.literal("grounditem")
             .requires { source ->
-                source.sender.hasAnyPermission(LOCK_PERMISSION, LEGACY_LOCK_PERMISSION) ||
-                    source.sender.hasAnyPermission(UNLOCK_PERMISSION, LEGACY_UNLOCK_PERMISSION) ||
-                    source.sender.hasAnyPermission(POP_PERMISSION, LEGACY_POP_PERMISSION) ||
-                    GroundItemsModule.hasAdminPermission(source.sender)
+                GroundItemPermissions.hasLockPermission(source.sender) ||
+                    GroundItemPermissions.hasUnlockPermission(source.sender) ||
+                    GroundItemPermissions.hasPopPermission(source.sender) ||
+                    GroundItemPermissions.hasAdminPermission(source.sender)
             }
             .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop> ...") }
             .then(buildLockCommand())
@@ -39,8 +40,8 @@ class GroundItemCommand(
     private fun buildLockCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("lock")
             .requires {
-                it.sender.hasAnyPermission(LOCK_PERMISSION, LEGACY_LOCK_PERMISSION) ||
-                    GroundItemsModule.hasAdminPermission(it.sender)
+                GroundItemPermissions.hasLockPermission(it.sender) ||
+                    GroundItemPermissions.hasAdminPermission(it.sender)
             }
             .executes { lockOrUnlock(it, lock = true, targetName = null) }
             .then(
@@ -52,8 +53,8 @@ class GroundItemCommand(
     private fun buildUnlockCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("unlock")
             .requires {
-                it.sender.hasAnyPermission(UNLOCK_PERMISSION, LEGACY_UNLOCK_PERMISSION) ||
-                    GroundItemsModule.hasAdminPermission(it.sender)
+                GroundItemPermissions.hasUnlockPermission(it.sender) ||
+                    GroundItemPermissions.hasAdminPermission(it.sender)
             }
             .executes { lockOrUnlock(it, lock = false, targetName = null) }
             .then(
@@ -64,7 +65,7 @@ class GroundItemCommand(
 
     private fun buildPopCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("pop")
-            .requires { it.sender.hasAnyPermission(POP_PERMISSION, LEGACY_POP_PERMISSION) }
+            .requires { GroundItemPermissions.hasPopPermission(it.sender) }
             .then(buildPopRaycastCommand())
             .then(buildPopCoordinatesCommand())
 
@@ -109,28 +110,28 @@ class GroundItemCommand(
     private fun lockOrUnlock(context: CommandContext<CommandSourceStack>, lock: Boolean, targetName: String?): Int {
         val sender = context.source.sender
         val targetedPlayer = resolveTargetPlayer(sender, targetName) ?: return 0
-        val lookedAtInteraction = module.findLookedAtInteraction(targetedPlayer)
+        val lookedAtInteraction = manager.findLookedAtInteraction(targetedPlayer)
             ?: return fail(context, "Target player is not looking at a ground item")
-        val target = module.resolveGroundItemTarget(lookedAtInteraction)
+        val target = manager.resolveGroundItemTarget(lookedAtInteraction)
             ?: return fail(context, "Ground item pair is invalid")
 
         if (lock) {
-            if (module.getLockMode(target) != GroundItemsModule.LockMode.NONE) {
-                sender.sendMessage(module.formatAlreadyBoundMessage(target.display.itemStack))
+            if (lockService.getLockMode(target) != LockMode.NONE) {
+                sender.sendMessage(lockService.formatAlreadyBoundMessage(target.display.itemStack))
                 return Command.SINGLE_SUCCESS
             }
-            val lockMode = module.lockTarget(sender, target)
-            sender.sendMessage(module.formatBoundMessage(target.display.itemStack, lockMode == GroundItemsModule.LockMode.TEMPORARY))
+            val lockMode = lockService.lockTarget(sender, target)
+            sender.sendMessage(lockService.formatBoundMessage(target.display.itemStack, lockMode == LockMode.TEMPORARY))
         } else {
-            if (module.getLockMode(target) == GroundItemsModule.LockMode.NONE) {
-                sender.sendMessage(module.formatAlreadyUnboundMessage(target.display.itemStack))
+            if (lockService.getLockMode(target) == LockMode.NONE) {
+                sender.sendMessage(lockService.formatAlreadyUnboundMessage(target.display.itemStack))
                 return Command.SINGLE_SUCCESS
             }
-            if (!module.canUnlock(sender, target)) {
+            if (!lockService.canUnlock(sender, target)) {
                 return fail(context, "You may not unlock this ground item")
             }
-            module.unlockTarget(target)
-            sender.sendMessage(module.formatUnboundMessage(target.display.itemStack))
+            lockService.unlockTarget(target)
+            sender.sendMessage(lockService.formatUnboundMessage(target.display.itemStack))
         }
 
         return Command.SINGLE_SUCCESS
@@ -138,8 +139,8 @@ class GroundItemCommand(
 
     private fun popRaycast(context: CommandContext<CommandSourceStack>, radius: Double): Int {
         val player = context.source.sender as? Player ?: return 0
-        val center = module.findPopLocation(player) ?: return Command.SINGLE_SUCCESS
-        module.popGroundItems(center, radius)
+        val center = manager.findPopLocation(player) ?: return Command.SINGLE_SUCCESS
+        manager.popGroundItems(center, radius)
         return Command.SINGLE_SUCCESS
     }
 
@@ -156,7 +157,7 @@ class GroundItemCommand(
             this.y = y
             this.z = z
         }
-        module.popGroundItems(center, radius)
+        manager.popGroundItems(center, radius)
         return Command.SINGLE_SUCCESS
     }
 
@@ -187,17 +188,7 @@ class GroundItemCommand(
         }
     }.buildFuture()
 
-    private fun CommandSender.hasAnyPermission(vararg permissions: String): Boolean = permissions.any(::hasPermission)
-
     private companion object {
-        const val LOCK_PERMISSION = "sneakygrounditems.command.grounditem.lock"
-        const val UNLOCK_PERMISSION = "sneakygrounditems.command.grounditem.unlock"
-        const val POP_PERMISSION = "sneakygrounditems.command.grounditem.pop"
-
-        const val LEGACY_LOCK_PERMISSION = "sneakymisc.command.grounditem.lock"
-        const val LEGACY_UNLOCK_PERMISSION = "sneakymisc.command.grounditem.unlock"
-        const val LEGACY_POP_PERMISSION = "sneakymisc.command.grounditem.pop"
-
         const val DEFAULT_POP_RADIUS = 2.5
     }
 }
