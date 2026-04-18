@@ -14,16 +14,23 @@ repositories {
 }
 
 val coreProtectJar = sequenceOf(
-    file("libs/CoreProtect-22.1.jar"),
-    file("C:\\Users\\DaniDipp\\Downloads\\1.20\\CoreProtect-22.1.jar"),
+    file("libs/CoreProtect-23.3.jar"),
+    file("C:\\Users\\DaniDipp\\Downloads\\1.21.4\\CoreProtect-23.3.jar"),
 ).firstOrNull { it.exists() }
-    ?: error("CoreProtect jar not found. Put CoreProtect-22.1.jar in libs/ or update build.gradle.kts.")
+    ?: error("CoreProtect jar not found. Put CoreProtect-23.3.jar in libs/ or update build.gradle.kts.")
+
+val magicSpellsJar = sequenceOf(
+    file("libs/MagicSpells-4.0-Beta-13.jar"),
+    file("C:\\Users\\DaniDipp\\Downloads\\1.21.4\\MagicSpells-4.0-Beta-13.jar"),
+).firstOrNull { it.exists() }
+    ?: error("MagicSpells jar not found. Put MagicSpells-4.0-Beta-13.jar in libs/ or update build.gradle.kts.")
 
 dependencies {
     implementation(kotlin("stdlib"))
     compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
     compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.13")
     compileOnly(files(coreProtectJar))
+    compileOnly(files(magicSpellsJar))
 
     testImplementation(kotlin("test"))
     testImplementation("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")

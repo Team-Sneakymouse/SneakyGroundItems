@@ -2,6 +2,7 @@ package com.danidipp.sneakygrounditems
 
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.DoubleArgumentType
+import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.ArgumentBuilder
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
@@ -22,16 +23,20 @@ internal class Command(
     private val playerSuggestions = SuggestionProvider<CommandSourceStack> { _, builder ->
         suggest(Bukkit.getOnlinePlayers().map { it.name }.sorted(), builder)
     }
+    private val currencySuggestions = SuggestionProvider<CommandSourceStack> { _, builder ->
+        suggest(Currency.entries.map { it.id }, builder)
+    }
 
     fun build(): LiteralCommandNode<CommandSourceStack> =
         Commands.literal("grounditem")
             .requires { source ->
-                source.sender.hasAnyPermission(LOCK_PERMISSION, UNLOCK_PERMISSION, POP_PERMISSION, ADMIN_PERMISSION)
+                source.sender.hasAnyPermission(LOCK_PERMISSION, UNLOCK_PERMISSION, POP_PERMISSION, SELL_PERMISSION, ADMIN_PERMISSION)
             }
-            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|migrate> ...") }
+            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|sell|migrate> ...") }
             .then(buildLockCommand())
             .then(buildUnlockCommand())
             .then(buildPopCommand())
+            .then(buildSellCommand())
             .then(buildMigrateCommand())
             .build()
 
@@ -60,6 +65,24 @@ internal class Command(
             .requires { it.sender.hasPermission(POP_PERMISSION) }
             .then(buildPopRaycastCommand())
             .then(buildPopCoordinatesCommand())
+
+    private fun buildSellCommand(): LiteralArgumentBuilder<CommandSourceStack> =
+        Commands.literal("sell")
+            .requires { it.sender.hasAnyPermission(SELL_PERMISSION, ADMIN_PERMISSION) }
+            .then(
+                Commands.argument("amount", IntegerArgumentType.integer(1, MAX_SELL_PRICE))
+                    .then(
+                        Commands.argument("currency", StringArgumentType.word())
+                            .suggests(currencySuggestions)
+                            .executes {
+                                sell(
+                                    it,
+                                    IntegerArgumentType.getInteger(it, "amount"),
+                                    StringArgumentType.getString(it, "currency"),
+                                )
+                            }
+                    )
+            )
 
     private fun buildMigrateCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("migrate")
@@ -115,7 +138,7 @@ internal class Command(
             ?: return fail(context, "Target player is not looking at a ground item")
 
         if (lock) {
-            if (lockService.getLockMode(display) != LockService.LockMode.NONE) {
+            if (manager.getGroundItemState(display).isLockedLike || lockService.getLockMode(display) != LockService.LockMode.NONE) {
                 sender.sendMessage(lockService.formatAlreadyBoundMessage(display.itemStack))
                 return Command.SINGLE_SUCCESS
             }
@@ -127,6 +150,9 @@ internal class Command(
                 ),
             )
         } else {
+            if (manager.getGroundItemState(display).isLockedLike) {
+                return fail(context, "Sale and payment ground items cannot be unlocked")
+            }
             if (lockService.getLockMode(display) == LockService.LockMode.NONE) {
                 sender.sendMessage(lockService.formatAlreadyUnboundMessage(display.itemStack))
                 return Command.SINGLE_SUCCESS
@@ -139,6 +165,14 @@ internal class Command(
         }
 
         return Command.SINGLE_SUCCESS
+    }
+
+    private fun sell(context: CommandContext<CommandSourceStack>, amount: Int, currencyId: String): Int {
+        val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem sell")
+        val currency = Currency.fromId(currencyId) ?: return fail(context, "Unknown currency")
+        val result = manager.sellGroundItem(player, amount, currency)
+        player.sendMessage(result.message)
+        return if (result.success) Command.SINGLE_SUCCESS else 0
     }
 
     private fun migrate(context: CommandContext<CommandSourceStack>, dryRun: Boolean): Int {
@@ -204,6 +238,8 @@ internal class Command(
         const val LOCK_PERMISSION = "sneakygrounditems.command.lock"
         const val UNLOCK_PERMISSION = "sneakygrounditems.command.unlock"
         const val POP_PERMISSION = "sneakygrounditems.command.pop"
+        const val SELL_PERMISSION = "sneakygrounditems.command.sell"
         const val ADMIN_PERMISSION = "sneakygrounditems.command.admin"
+        const val MAX_SELL_PRICE = 999_999_999
     }
 }

@@ -9,7 +9,7 @@ dependencies:
   server:
     MagicSpells:
       load: BEFORE
-      required: false
+      required: true
     WorldGuard:
       load: BEFORE
       required: false

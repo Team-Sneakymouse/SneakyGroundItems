@@ -5,6 +5,9 @@ import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
 import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
+import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryCloseEvent
+import org.bukkit.event.inventory.InventoryDragEvent
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
@@ -53,5 +56,20 @@ class SneakyGroundItems : JavaPlugin(), Listener {
     @EventHandler
     fun onPlayerPickItem(event: PlayerPickItemEvent) {
         groundItemManager.handlePlayerPickItem(event)
+    }
+
+    @EventHandler
+    fun onInventoryClick(event: InventoryClickEvent) {
+        groundItemManager.handleInventoryClick(event)
+    }
+
+    @EventHandler
+    fun onInventoryDrag(event: InventoryDragEvent) {
+        groundItemManager.handleInventoryDrag(event)
+    }
+
+    @EventHandler
+    fun onInventoryClose(event: InventoryCloseEvent) {
+        groundItemManager.handleInventoryClose(event)
     }
 }

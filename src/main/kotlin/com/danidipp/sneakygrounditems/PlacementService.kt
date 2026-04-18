@@ -9,6 +9,7 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
+import org.joml.Vector3d
 import org.joml.Vector3f
 import java.util.concurrent.ThreadLocalRandom
 
@@ -16,10 +17,8 @@ internal class PlacementService(
     private val persistence: PersistenceService,
     private val lockService: LockService,
 ) {
-    private val groundItemMinScaleKey = NamespacedKey.fromString("magicspells:magicspellpermanentdata_grounditem_min_scale")
-        ?: throw IllegalStateException("Failed to create NamespacedKey for magicspells:magicspellpermanentdata_grounditem_min_scale")
-    private val groundItemMaxScaleKey = NamespacedKey.fromString("magicspells:magicspellpermanentdata_grounditem_max_scale")
-        ?: throw IllegalStateException("Failed to create NamespacedKey for magicspells:magicspellpermanentdata_grounditem_max_scale")
+    private val groundItemMinScaleKey = NamespacedKey("magicspells", "magicspellpermanentdata_grounditem_min_scale")
+    private val groundItemMaxScaleKey = NamespacedKey("magicspells", "magicspellpermanentdata_grounditem_max_scale")
 
     fun buildPlacement(playerYaw: Float, hitPosition: Location, hitFace: BlockFace, stack: ItemStack): Placement {
         val normal = hitFace.direction.clone().normalize()
@@ -32,6 +31,7 @@ internal class PlacementService(
         return Placement(
             location = anchor,
             transformation = transformationForFace(hitFace, playerYaw, stackScale),
+            face = hitFace,
         )
     }
 
@@ -48,6 +48,7 @@ internal class PlacementService(
                 itemDisplay.transformation = placement.transformation
                 itemDisplay.setRotation(0.0f, 0.0f)
                 persistence.tagDisplay(itemDisplay)
+                persistence.setFace(itemDisplay, placement.face)
             }
 
             true
@@ -92,19 +93,45 @@ internal class PlacementService(
         ).asSequence()
             .filterIsInstance<ItemDisplay>()
             .filter(persistence::isGroundItemDisplay)
+            .filter { persistence.getGroundItemState(it) == GroundItemState.NORMAL }
             .filter { lockService.getLockMode(it) == LockService.LockMode.NONE }
             .filter { it.itemStack.isSimilar(stack) }
             .filter { it.itemStack.amount < it.itemStack.maxStackSize.coerceAtLeast(1) }
             .minByOrNull { it.location.distanceSquared(location) }
     }
 
-    private fun rescaleTransformation(existing: Transformation, stackScale: Float): Transformation {
+    fun rescaleTransformation(existing: Transformation, stackScale: Float): Transformation {
         return Transformation(
             Vector3f(existing.translation),
             Quaternionf(existing.leftRotation),
             Vector3f(stackScale, stackScale, stackScale),
             Quaternionf(existing.rightRotation),
         )
+    }
+
+    fun displayScale(display: ItemDisplay): Float {
+        return display.transformation.scale.x
+    }
+
+    fun deriveFace(display: ItemDisplay): BlockFace {
+        val direction = Vector3d(0.0, 0.0, 1.0)
+        display.transformation.leftRotation.transform(direction)
+
+        return BlockFace.entries
+            .filter { it.modX != 0 || it.modY != 0 || it.modZ != 0 }
+            .maxBy {
+                (it.modX.toDouble() * direction.x) +
+                    (it.modY.toDouble() * direction.y) +
+                    (it.modZ.toDouble() * direction.z)
+            }
+    }
+
+    fun surfaceForFace(face: BlockFace): PlacementSurface {
+        return when (face) {
+            BlockFace.UP -> PlacementSurface.GROUND
+            BlockFace.DOWN -> PlacementSurface.CEILING
+            else -> PlacementSurface.WALL
+        }
     }
 
     private fun transformationForFace(face: BlockFace, playerYaw: Float, stackScale: Float): Transformation {
@@ -164,6 +191,7 @@ internal class PlacementService(
     internal data class Placement(
         val location: Location,
         val transformation: Transformation,
+        val face: BlockFace,
     )
 
     internal data class MergeResult(

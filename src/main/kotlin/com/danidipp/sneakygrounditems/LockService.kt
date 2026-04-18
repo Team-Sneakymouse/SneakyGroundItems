@@ -94,7 +94,7 @@ internal class LockService(
         return LockMode.TEMPORARY
     }
 
-    private fun isPlotMember(player: Player, location: Location): Boolean {
+    fun isPlotMember(player: Player, location: Location): Boolean {
         val world = location.world ?: return false
         val worldGuardPlugin = Bukkit.getPluginManager().getPlugin("WorldGuard") as? WorldGuardPlugin ?: return false
         val regionManager = WorldGuard.getInstance().platform.regionContainer[BukkitAdapter.adapt(world)] ?: return false
