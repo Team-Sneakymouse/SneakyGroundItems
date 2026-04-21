@@ -171,7 +171,7 @@ internal class Command(
         val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem sell")
         val currency = Currency.fromId(currencyId) ?: return fail(context, "Unknown currency")
         val result = manager.sellGroundItem(player, amount, currency)
-        player.sendMessage(result.message)
+        if (result.message != null) player.sendMessage(result.message)
         return if (result.success) Command.SINGLE_SUCCESS else 0
     }
 

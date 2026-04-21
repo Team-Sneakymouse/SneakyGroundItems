@@ -42,6 +42,7 @@ internal class PlacementService(
             display = placement.location.world.spawn(placement.location, ItemDisplay::class.java) { itemDisplay ->
                 itemDisplay.isPersistent = true
                 itemDisplay.setGravity(false)
+                itemDisplay.viewRange = Constants.ITEM_DISPLAY_VIEW_RANGE
                 itemDisplay.setItemStack(stack)
                 itemDisplay.itemDisplayTransform = ItemDisplay.ItemDisplayTransform.FIXED
                 itemDisplay.billboard = Display.Billboard.FIXED

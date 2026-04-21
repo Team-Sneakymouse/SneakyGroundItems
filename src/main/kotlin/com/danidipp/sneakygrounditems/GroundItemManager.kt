@@ -192,8 +192,12 @@ internal class GroundItemManager(
             return CommandResult(false, Component.text("The $currency bank is unavailable"))
         }
 
-        val display = findLookedAtGroundItem(player)
-            ?: return CommandResult(false, Component.text("You are not looking at a ground item"))
+        val display = findLookedAtGroundItem(player) ?: return CommandResult(false, null)
+        if (hasExpiredMagicSpellsLifetime(display.itemStack)) {
+            removeDisplayAndCompanion(display)
+            return CommandResult(false, Component.text("That ground item has expired"))
+        }
+
         val state = persistence.getGroundItemState(display)
 
         if (state == GroundItemState.PAYMENT) {
@@ -518,7 +522,7 @@ internal class GroundItemManager(
         textDisplay.teleport(display.location.clone().add(offset))
         textDisplay.isPersistent = true
         textDisplay.setGravity(false)
-        textDisplay.viewRange = SALE_TEXT_VIEW_RANGE
+        textDisplay.viewRange = Constants.TEXT_DISPLAY_VIEW_RANGE
         textDisplay.transformation = Transformation(
             Vector3f(),
             Quaternionf(),
@@ -584,10 +588,17 @@ internal class GroundItemManager(
     private fun processChunk(chunk: Chunk) {
         val displays = mutableListOf<ItemDisplay>()
         val companionTextByPartner = mutableMapOf<UUID, MutableList<TextDisplay>>()
+        val now = System.currentTimeMillis()
 
         for (entity in chunk.entities) {
             when {
                 entity is ItemDisplay && persistence.isGroundItemDisplay(entity) -> {
+                    if (hasExpiredMagicSpellsLifetime(entity.itemStack, now)) {
+                        removeDisplayAndCompanion(entity)
+                        continue
+                    }
+
+                    entity.viewRange = Constants.ITEM_DISPLAY_VIEW_RANGE
                     displays += entity
                     lockService.clearExpiredTemporaryLock(entity)
                 }
@@ -1050,6 +1061,11 @@ internal class GroundItemManager(
         return meta.persistentDataContainer.has(soulboundOwnerKey, PersistentDataType.STRING)
     }
 
+    private fun hasExpiredMagicSpellsLifetime(stack: ItemStack, nowMillis: Long = System.currentTimeMillis()): Boolean {
+        val meta = stack.itemMeta ?: return false
+        return MagicSpellsItemExpiry.isExpired(meta, nowMillis)
+    }
+
     private fun isExplicitlyUnsellable(stack: ItemStack): Boolean {
         val meta = stack.itemMeta ?: return false
         val rawValue = meta.persistentDataContainer.get(groundItemSellableKey, PersistentDataType.STRING) ?: return false
@@ -1109,7 +1125,7 @@ internal class GroundItemManager(
 
     internal data class CommandResult(
         val success: Boolean,
-        val message: Component,
+        val message: Component?,
     )
 
     private data class CommerceData(
@@ -1194,7 +1210,6 @@ internal class GroundItemManager(
         private const val PREVIEW_SLOT = 4
         private const val NO_SLOT = 5
         private const val BACKGROUND_SLOT = 8
-        private const val SALE_TEXT_VIEW_RANGE = 24.0f
         private const val TEXT_SCALE = 0.15f
         private const val TEXT_OFFSET = 0.25f
         private const val PAYMENT_ITEM_SCALE = 0.5f
