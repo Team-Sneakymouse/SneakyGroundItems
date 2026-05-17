@@ -12,6 +12,7 @@ import com.danidipp.sneakygrounditems.lock.LockService
 import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
+import com.nisovin.magicspells.MagicSpells
 import org.bukkit.Bukkit
 import org.bukkit.Effect
 import org.bukkit.FluidCollisionMode
@@ -94,6 +95,16 @@ internal class GroundItemInteractionService(
 
     fun handlePlayerInteract(event: PlayerInteractEvent) {
         if (event.useInteractedBlock() == Result.DENY || event.useItemInHand() == Result.DENY) return
+        if (event.action == Action.LEFT_CLICK_BLOCK || event.action == Action.LEFT_CLICK_AIR) {
+            if (runtimeState.shouldCancelAndRefreshPickupLeftClick(event.player.uniqueId)) {
+                event.setUseInteractedBlock(Result.DENY)
+                event.setUseItemInHand(Result.DENY)
+                event.setCancelled(true)
+                event.isCancelled = true
+                return
+            }
+        }
+
         if (event.action != Action.LEFT_CLICK_BLOCK) return
         if (event.hand != EquipmentSlot.HAND) return
 
@@ -185,6 +196,8 @@ internal class GroundItemInteractionService(
         if (!runtimeState.tryBeginDisplayResolution(displayUuid)) return
 
         val playerUuid = player.uniqueId
+        runtimeState.markPickupLeftClickGuard(playerUuid)
+        MagicSpells.plugin.castListener.setNoCast(player)
 
         Bukkit.getScheduler().runTask(plugin, Runnable {
             try {

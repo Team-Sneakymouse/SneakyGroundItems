@@ -1,7 +1,10 @@
 package com.danidipp.sneakygrounditems.interaction
 
 import io.papermc.paper.event.player.PlayerPickItemEvent
+import net.kyori.adventure.text.Component
+import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerInteractEvent
@@ -15,7 +18,7 @@ internal class GroundItemInteractionListener(
         interactionService.handlePlayerDropItem(event)
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOW)
     fun onPlayerInteract(event: PlayerInteractEvent) {
         interactionService.handlePlayerInteract(event)
     }

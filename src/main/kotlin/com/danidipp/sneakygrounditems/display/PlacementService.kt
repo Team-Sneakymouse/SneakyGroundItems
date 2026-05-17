@@ -169,6 +169,10 @@ internal class PlacementService(
         return scaleForStackAmount(stack.amount, stack.maxStackSize, scaleRange.min, scaleRange.max)
     }
 
+    fun minimumScaleForStack(stack: ItemStack): Float {
+        return resolveGroundItemScaleRange(stack).min
+    }
+
     internal fun scaleForStackAmount(amount: Int, maxStackSize: Int, minScale: Float, maxScale: Float): Float {
         val resolvedMaxStackSize = maxStackSize.coerceAtLeast(1)
         if (resolvedMaxStackSize == 1) return minScale

@@ -85,6 +85,7 @@ internal class GroundItemDisplayService(
 
         val commerceData = readCommerceData(display, state) ?: return false
         val face = ensureDisplayFace(display)
+        rescaleForCommerceState(display, state)
         val linkedText = persistence.getPartnerUuid(display)
             ?.let(persistence::resolveTextDisplay)
             ?.takeIf { persistence.isGroundItemText(it) && persistence.getPartnerUuid(it) == display.uniqueId }
@@ -103,6 +104,7 @@ internal class GroundItemDisplayService(
         persistence.setGroundItemState(display, GroundItemState.NORMAL)
         persistence.setCurrency(display, null)
         persistence.setPrice(display, null)
+        rescaleForNormalState(display)
         syncCompanionText(display)
     }
 
@@ -141,6 +143,7 @@ internal class GroundItemDisplayService(
         }
 
         val face = ensureDisplayFace(display)
+        rescaleForCommerceState(display, state)
         val linkedText = persistence.getPartnerUuid(display)
             ?.let(persistence::resolveTextDisplay)
             ?.takeIf { persistence.isGroundItemText(it) && persistence.getPartnerUuid(it) == display.uniqueId }
@@ -181,6 +184,21 @@ internal class GroundItemDisplayService(
         }
 
         persistence.clearCommerceData(display)
+        rescaleForNormalState(display)
+    }
+
+    private fun rescaleForNormalState(display: ItemDisplay) {
+        val stackScale = placementService.scaleForStack(display.itemStack)
+        if (placementService.displayScale(display) == stackScale) return
+        display.transformation = placementService.rescaleTransformation(display.transformation, stackScale)
+    }
+
+    private fun rescaleForCommerceState(display: ItemDisplay, state: GroundItemState) {
+        if (state != GroundItemState.SALE) return
+
+        val minimumScale = placementService.minimumScaleForStack(display.itemStack)
+        if (placementService.displayScale(display) == minimumScale) return
+        display.transformation = placementService.rescaleTransformation(display.transformation, minimumScale)
     }
 
     private fun spawnCompanionText(display: ItemDisplay): TextDisplay? {

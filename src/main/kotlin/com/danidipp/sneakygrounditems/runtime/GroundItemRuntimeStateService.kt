@@ -30,6 +30,22 @@ internal class GroundItemRuntimeStateService {
         return true
     }
 
+    fun markPickupLeftClickGuard(playerId: UUID, nowMillis: Long = System.currentTimeMillis()) {
+        val state = playerStateById.getOrPut(playerId, ::PlayerRuntimeState)
+        state.pickupLeftClickGuardedUntil = nowMillis + Constants.PICKUP_LEFT_CLICK_GUARD_MS
+    }
+
+    fun shouldCancelAndRefreshPickupLeftClick(playerId: UUID, nowMillis: Long = System.currentTimeMillis()): Boolean {
+        val state = playerStateById[playerId] ?: return false
+        if (nowMillis >= state.pickupLeftClickGuardedUntil) {
+            state.pickupLeftClickGuardedUntil = 0L
+            return false
+        }
+
+        state.pickupLeftClickGuardedUntil = nowMillis + Constants.PICKUP_LEFT_CLICK_GUARD_MS
+        return true
+    }
+
     fun tryBeginDisplayResolution(displayUuid: UUID): Boolean {
         return pendingResolutionDisplayIds.add(displayUuid)
     }
@@ -42,8 +58,9 @@ internal class GroundItemRuntimeStateService {
         return displayUuid in pendingResolutionDisplayIds
     }
 
-    private data class PlayerRuntimeState(
+    data class PlayerRuntimeState(
         var lastCreatedAt: Long = 0L,
         var lastFeedbackAt: Long = 0L,
+        var pickupLeftClickGuardedUntil: Long = 0L,
     )
 }
