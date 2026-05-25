@@ -19,12 +19,16 @@ internal class GroundItemLookupService(
     private val runtimeState: GroundItemRuntimeStateService,
 ) {
     fun findLookedAtGroundItem(player: Player): ItemDisplay? {
-        val hitPosition = findLookedAtBlockHitPosition(player) ?: return null
+        return findLookedAtGroundItem(player, Constants.INTERACTION_DISTANCE)
+    }
+
+    fun findLookedAtGroundItem(player: Player, distance: Double): ItemDisplay? {
+        val hitPosition = findLookedAtBlockHitPosition(player, distance) ?: return null
         return findGroundItemNearHitPosition(player, hitPosition)
     }
 
     fun findInteractedGroundItem(event: PlayerInteractEvent): ItemDisplay? {
-        val hitPosition = event.interactionPoint ?: findLookedAtBlockHitPosition(event.player) ?: return null
+        val hitPosition = event.interactionPoint ?: findLookedAtBlockHitPosition(event.player, Constants.INTERACTION_DISTANCE) ?: return null
         return findGroundItemNearHitPosition(event.player, hitPosition)
     }
 
@@ -55,11 +59,11 @@ internal class GroundItemLookupService(
             .toList()
     }
 
-    private fun findLookedAtBlockHitPosition(player: Player): Location? {
+    private fun findLookedAtBlockHitPosition(player: Player, distance: Double): Location? {
         val result = player.world.rayTraceBlocks(
             player.eyeLocation,
             player.eyeLocation.direction,
-            Constants.INTERACTION_DISTANCE,
+            distance,
             FluidCollisionMode.NEVER,
             true,
         ) ?: return null

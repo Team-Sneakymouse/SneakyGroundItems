@@ -85,7 +85,7 @@ internal class GroundItemInteractionService(
             return
         }
 
-        if (!placementService.spawnDisplay(placement, droppedStack)) return
+        if (!placementService.spawnDisplay(placement, droppedStack, event.player.name)) return
 
         runtimeState.markGroundItemCreated(event.player.uniqueId)
         effectsService.playFeedback(event.player.uniqueId, placement.location, "lom:sfx.clothingequip")

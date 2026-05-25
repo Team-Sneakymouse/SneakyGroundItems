@@ -2,11 +2,14 @@ package com.danidipp.sneakygrounditems.command
 
 import com.danidipp.sneakygrounditems.commerce.Currency
 import com.danidipp.sneakygrounditems.commerce.GroundItemCommerceService
+import com.danidipp.sneakygrounditems.config.Constants
 import com.danidipp.sneakygrounditems.interaction.GroundItemInteractionService
 import com.danidipp.sneakygrounditems.interaction.GroundItemLookupService
 import com.danidipp.sneakygrounditems.lock.LockService
 import com.danidipp.sneakygrounditems.migration.GroundItemMigrationService
+import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
+import com.sk89q.worldedit.math.BlockVector3
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.DoubleArgumentType
 import com.mojang.brigadier.arguments.IntegerArgumentType
@@ -19,8 +22,10 @@ import com.mojang.brigadier.suggestion.SuggestionsBuilder
 import com.mojang.brigadier.tree.LiteralCommandNode
 import io.papermc.paper.command.brigadier.CommandSourceStack
 import io.papermc.paper.command.brigadier.Commands
+import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
+import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 
 internal class Command(
@@ -34,6 +39,13 @@ internal class Command(
     private val playerSuggestions = SuggestionProvider<CommandSourceStack> { _, builder ->
         suggest(Bukkit.getOnlinePlayers().map { it.name }.sorted(), builder)
     }
+    private val offlinePlayerSuggestions = SuggestionProvider<CommandSourceStack> { _, builder ->
+        if (builder.remaining.isEmpty()) {
+            builder.buildFuture()
+        } else {
+            suggest(Bukkit.getOfflinePlayers().mapNotNull { it.name }.sorted(), builder)
+        }
+    }
     private val currencySuggestions = SuggestionProvider<CommandSourceStack> { _, builder ->
         suggest(Currency.entries.map { it.id }, builder)
     }
@@ -41,14 +53,22 @@ internal class Command(
     fun build(): LiteralCommandNode<CommandSourceStack> =
         Commands.literal("grounditem")
             .requires { source ->
-                source.sender.hasAnyPermission(LOCK_PERMISSION, UNLOCK_PERMISSION, POP_PERMISSION, SELL_PERMISSION, ADMIN_PERMISSION)
+                source.sender.hasAnyPermission(
+                    LOCK_PERMISSION,
+                    UNLOCK_PERMISSION,
+                    POP_PERMISSION,
+                    SELL_PERMISSION,
+                    ADMIN_PERMISSION,
+                    MODERATOR_PERMISSION,
+                )
             }
-            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|sell|migrate> ...") }
+            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|sell|migrate|check> ...") }
             .then(buildLockCommand())
             .then(buildUnlockCommand())
             .then(buildPopCommand())
             .then(buildSellCommand())
             .then(buildMigrateCommand())
+            .then(buildCheckCommand())
             .build()
 
     private fun buildLockCommand(): LiteralArgumentBuilder<CommandSourceStack> =
@@ -102,6 +122,29 @@ internal class Command(
             .then(
                 Commands.literal("dry")
                     .executes { migrate(it, dryRun = true) }
+            )
+
+    private fun buildCheckCommand(): LiteralArgumentBuilder<CommandSourceStack> =
+        Commands.literal("check")
+            .requires { it.sender.hasPermission(MODERATOR_PERMISSION) }
+            .executes { checkRaycast(it) }
+            .then(
+                Commands.literal("plot")
+                    .executes { checkPlot(it) }
+            )
+            .then(buildCheckRangeCommand())
+            .then(
+                Commands.argument("playerName", StringArgumentType.word())
+                    .suggests(offlinePlayerSuggestions)
+                    .executes { checkPlayer(it, StringArgumentType.getString(it, "playerName")) }
+            )
+
+    private fun buildCheckRangeCommand(): LiteralArgumentBuilder<CommandSourceStack> =
+        Commands.literal("range")
+            .executes { checkRange(it, DEFAULT_CHECK_RANGE) }
+            .then(
+                Commands.argument("range", DoubleArgumentType.doubleArg(0.0))
+                    .executes { checkRange(it, DoubleArgumentType.getDouble(it, "range")) }
             )
 
     private fun buildPopRaycastCommand(): LiteralArgumentBuilder<CommandSourceStack> =
@@ -191,6 +234,63 @@ internal class Command(
         return if (migrationService.startMigration(player, dryRun)) Command.SINGLE_SUCCESS else 0
     }
 
+    private fun checkRaycast(context: CommandContext<CommandSourceStack>): Int {
+        val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem check")
+        val display = lookupService.findLookedAtGroundItem(player, Constants.CHECK_RAYCAST_DISTANCE)
+            ?: return fail(context, "You are not looking at a ground item")
+
+        val stack = display.itemStack
+        val creatorName = persistence.getCreatorName(display) ?: UNKNOWN_CREATOR
+        context.source.sender.sendMessage(
+            Component.text("${stack.amount}x ")
+                .append(stack.displayName())
+                .append(Component.text(" was placed by $creatorName${statusSuffix(display)}")),
+        )
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun checkRange(context: CommandContext<CommandSourceStack>, range: Double): Int {
+        val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem check range")
+        val rangeSquared = range * range
+        val center = player.location
+        val world = player.world
+        val counts = countGroundItems {
+            it.world == world && it.location.distanceSquared(center) <= rangeSquared
+        }
+
+        context.source.sender.sendMessage(
+            "Range contains ${counts.total} ground items (${counts.sellable} sellable, ${counts.locked} locked)",
+        )
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun checkPlot(context: CommandContext<CommandSourceStack>): Int {
+        val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem check plot")
+        val plot = lockService.findPriorityFivePlotAt(player.location)
+            ?: return fail(context, "You are not standing in a plot")
+        val world = player.world
+        val counts = countGroundItems {
+            it.world == world && plot.contains(BlockVector3.at(it.location.blockX, it.location.blockY, it.location.blockZ))
+        }
+
+        context.source.sender.sendMessage(
+            "${plot.id} contains ${counts.total} ground items (${counts.sellable} sellable, ${counts.locked} locked)",
+        )
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun checkPlayer(context: CommandContext<CommandSourceStack>, playerName: String): Int {
+        val resolvedName = resolveOfflinePlayerName(playerName)
+        val counts = countGroundItems {
+            persistence.getCreatorName(it)?.equals(resolvedName, ignoreCase = true) == true
+        }
+
+        context.source.sender.sendMessage(
+            "$resolvedName placed ${counts.total} grounditems (${counts.sellable} sellable, ${counts.locked} locked)",
+        )
+        return Command.SINGLE_SUCCESS
+    }
+
     private fun popRaycast(context: CommandContext<CommandSourceStack>, radius: Double): Int {
         val player = context.source.sender as? Player ?: return 0
         val center = lookupService.findPopLocation(player) ?: return Command.SINGLE_SUCCESS
@@ -229,6 +329,52 @@ internal class Command(
         }
     }
 
+    private fun countGroundItems(predicate: (ItemDisplay) -> Boolean): GroundItemAuditCounts {
+        return loadedGroundItemDisplays()
+            .filter(predicate)
+            .fold(GroundItemAuditCounts()) { counts, display ->
+                val sellable = isSellable(display)
+                val locked = isLocked(display)
+                GroundItemAuditCounts(
+                    total = counts.total + 1,
+                    sellable = counts.sellable + if (sellable) 1 else 0,
+                    locked = counts.locked + if (locked) 1 else 0,
+                )
+            }
+    }
+
+    private fun loadedGroundItemDisplays(): Sequence<ItemDisplay> {
+        return Bukkit.getWorlds().asSequence()
+            .flatMap { world -> world.loadedChunks.asSequence() }
+            .flatMap { chunk -> chunk.entities.asSequence() }
+            .filterIsInstance<ItemDisplay>()
+            .filter(persistence::isGroundItemDisplay)
+    }
+
+    private fun isSellable(display: ItemDisplay): Boolean {
+        return persistence.getGroundItemState(display) == GroundItemState.SALE
+    }
+
+    private fun isLocked(display: ItemDisplay): Boolean {
+        return persistence.getGroundItemState(display) == GroundItemState.PAYMENT ||
+            lockService.getLockMode(display) != LockService.LockMode.NONE
+    }
+
+    private fun statusSuffix(display: ItemDisplay): String {
+        val suffixes = buildList {
+            if (isSellable(display)) add("(sellable)")
+            if (isLocked(display)) add("(locked)")
+        }
+        return if (suffixes.isEmpty()) "" else " ${suffixes.joinToString(" ")}"
+    }
+
+    private fun resolveOfflinePlayerName(playerName: String): String {
+        return Bukkit.getOfflinePlayers()
+            .firstOrNull { it.name?.equals(playerName, ignoreCase = true) == true }
+            ?.name
+            ?: playerName
+    }
+
     private fun fail(context: CommandContext<CommandSourceStack>, message: String): Int {
         context.source.sender.sendMessage(message)
         return 0
@@ -246,11 +392,20 @@ internal class Command(
 
     companion object {
         const val DEFAULT_POP_RADIUS = 2.5
+        const val DEFAULT_CHECK_RANGE = 5.0
         const val LOCK_PERMISSION = "sneakygrounditems.command.lock"
         const val UNLOCK_PERMISSION = "sneakygrounditems.command.unlock"
         const val POP_PERMISSION = "sneakygrounditems.command.pop"
         const val SELL_PERMISSION = "sneakygrounditems.command.sell"
         const val ADMIN_PERMISSION = "sneakygrounditems.command.admin"
+        const val MODERATOR_PERMISSION = "sneakygrounditems.command.moderator"
         const val MAX_SELL_PRICE = 999_999_999
+        const val UNKNOWN_CREATOR = "unknown"
     }
+
+    private data class GroundItemAuditCounts(
+        val total: Int = 0,
+        val sellable: Int = 0,
+        val locked: Int = 0,
+    )
 }

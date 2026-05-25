@@ -6,6 +6,7 @@ import com.sk89q.worldedit.bukkit.BukkitAdapter
 import com.sk89q.worldedit.math.BlockVector3
 import com.sk89q.worldguard.WorldGuard
 import com.sk89q.worldguard.bukkit.WorldGuardPlugin
+import com.sk89q.worldguard.protection.regions.ProtectedRegion
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.GameMode
@@ -97,15 +98,27 @@ internal class LockService(
     }
 
     fun isPlotMember(player: Player, location: Location): Boolean {
-        val world = location.world ?: return false
         val worldGuardPlugin = Bukkit.getPluginManager().getPlugin("WorldGuard") as? WorldGuardPlugin ?: return false
-        val regionManager = WorldGuard.getInstance().platform.regionContainer[BukkitAdapter.adapt(world)] ?: return false
-        val applicableRegions = regionManager.getApplicableRegions(BlockVector3.at(location.x, location.y, location.z))
         val worldGuardPlayer = worldGuardPlugin.wrapPlayer(player)
 
-        return applicableRegions.any { region ->
-            region.priority == 5 && (region.isOwner(worldGuardPlayer) || region.isMember(worldGuardPlayer))
+        return priorityFivePlotsAt(location).any { region ->
+            region.isOwner(worldGuardPlayer) || region.isMember(worldGuardPlayer)
         }
+    }
+
+    fun findPriorityFivePlotAt(location: Location): ProtectedRegion? {
+        return priorityFivePlotsAt(location).minByOrNull { it.id }
+    }
+
+    private fun priorityFivePlotsAt(location: Location): List<ProtectedRegion> {
+        val world = location.world ?: return emptyList()
+        val regionManager = WorldGuard.getInstance().platform.regionContainer[BukkitAdapter.adapt(world)] ?: return emptyList()
+        val applicableRegions = regionManager.getApplicableRegions(BlockVector3.at(location.x, location.y, location.z))
+
+        return applicableRegions
+            .filter { it.priority == 5 }
+            .sortedBy { it.id }
+            .toList()
     }
 
     private fun todayLockDate(): String {

@@ -39,7 +39,7 @@ internal class PlacementService(
         )
     }
 
-    fun spawnDisplay(placement: Placement, stack: ItemStack): Boolean {
+    fun spawnDisplay(placement: Placement, stack: ItemStack, creatorName: String): Boolean {
         var display: ItemDisplay? = null
 
         return runCatching {
@@ -54,6 +54,7 @@ internal class PlacementService(
                 itemDisplay.setRotation(0.0f, 0.0f)
                 persistence.tagDisplay(itemDisplay)
                 persistence.setFace(itemDisplay, placement.face)
+                persistence.setCreatorName(itemDisplay, creatorName)
             }
 
             true

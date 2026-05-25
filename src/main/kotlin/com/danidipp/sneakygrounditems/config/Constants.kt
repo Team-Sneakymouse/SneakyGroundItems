@@ -2,6 +2,7 @@ package com.danidipp.sneakygrounditems.config
 
 object Constants {
     const val INTERACTION_DISTANCE = 2.5
+    const val CHECK_RAYCAST_DISTANCE = 8.0
     const val POP_RAYCAST_DISTANCE = 8.0
     const val ITEM_DISPLAY_VIEW_RANGE = 48.0f/64/5
     const val TEXT_DISPLAY_VIEW_RANGE = 16.0f/64/5

@@ -27,6 +27,7 @@ internal class PersistenceService(plugin: Plugin) {
     private val stateKey = NamespacedKey(plugin, "ground_item_state")
     private val currencyKey = NamespacedKey(plugin, "ground_item_currency")
     private val priceKey = NamespacedKey(plugin, "ground_item_price")
+    private val creatorNameKey = NamespacedKey(plugin, "ground_item_creator_name")
     private val permanentLockModeKey = NamespacedKey(plugin, "ground_item_lock_mode")
     private val legacyPermanentLockModeKey = legacyKey("ground_item_lock_mode")
     private val temporaryLockDateKey = NamespacedKey(plugin, "ground_item_temporary_lock_date")
@@ -102,6 +103,20 @@ internal class PersistenceService(plugin: Plugin) {
         }
 
         data.set(priceKey, PersistentDataType.STRING, price.toString())
+    }
+
+    fun getCreatorName(entity: PersistentDataHolder): String? {
+        return entity.persistentDataContainer.get(creatorNameKey, PersistentDataType.STRING)
+    }
+
+    fun setCreatorName(entity: PersistentDataHolder, playerName: String?) {
+        val data = entity.persistentDataContainer
+        if (playerName == null) {
+            data.remove(creatorNameKey)
+            return
+        }
+
+        data.set(creatorNameKey, PersistentDataType.STRING, playerName)
     }
 
     fun getPartnerUuid(entity: PersistentDataHolder): UUID? {

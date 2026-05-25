@@ -46,4 +46,23 @@ class PersistenceServiceTest {
         assertNull(persistence.getPrice(holder))
         assertNull(persistence.getPartnerUuid(holder))
     }
+
+    @Test
+    fun creatorNameRoundTripsThroughHolder() {
+        val holder = FakePersistentDataHolder()
+
+        persistence.setCreatorName(holder, "DaniDipp")
+
+        assertEquals("DaniDipp", persistence.getCreatorName(holder))
+    }
+
+    @Test
+    fun creatorNameCanBeCleared() {
+        val holder = FakePersistentDataHolder()
+        persistence.setCreatorName(holder, "DaniDipp")
+
+        persistence.setCreatorName(holder, null)
+
+        assertNull(persistence.getCreatorName(holder))
+    }
 }
