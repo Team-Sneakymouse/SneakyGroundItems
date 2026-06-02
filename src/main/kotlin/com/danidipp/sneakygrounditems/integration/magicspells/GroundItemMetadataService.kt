@@ -7,6 +7,7 @@ import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
 
 internal class GroundItemMetadataService {
+    private val magicItemKey = NamespacedKey("magicspells", "magicitem")
     private val soulboundOwnerKey = NamespacedKey("magicspells", "soulbound_owner")
     private val groundItemSellableKey = NamespacedKey("magicspells", "magicspellpermanentdata_grounditem_sellable")
     private val groundItemPlaceableKey = NamespacedKey("magicspells", "magicspellpermanentdata_grounditem_placeable")
@@ -42,5 +43,10 @@ internal class GroundItemMetadataService {
         val owner = meta.persistentDataContainer.get(soulboundOwnerKey, PersistentDataType.STRING) ?: return false
         val ownerUuid = runCatching { UUID.fromString(owner) }.getOrNull() ?: return true
         return ownerUuid != playerUuid
+    }
+
+    fun getMagicItemId(stack: ItemStack): String? {
+        val meta = stack.itemMeta ?: return null
+        return meta.persistentDataContainer.get(magicItemKey, PersistentDataType.STRING)
     }
 }

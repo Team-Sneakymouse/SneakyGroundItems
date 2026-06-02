@@ -192,10 +192,7 @@ internal class GroundItemCommerceService(
 
             displayService.removeDisplayAndCompanion(display)
             effectsService.playUiSound(player, "lom:buy")
-            player.sendMessage(
-                Component.text("Redeemed payment item for ", NamedTextColor.YELLOW)
-                    .append(Component.text("${paymentData.price} ${paymentData.currency}", NamedTextColor.GOLD)),
-            )
+            player.sendMessage(buildRedeemPaymentMessage(display, paymentData))
         } finally {
             runtimeState.finishDisplayResolution(displayUuid)
         }
@@ -237,12 +234,16 @@ internal class GroundItemCommerceService(
         val originalState = persistence.getGroundItemState(display)
         val originalCurrency = persistence.getCurrency(display)
         val originalPrice = persistence.getPrice(display)
+        val originalPaymentMagicItemId = persistence.getPaymentMagicItemId(display)
+        val originalPaymentItemAmount = persistence.getPaymentItemAmount(display)
 
         display.setItemStack(createPaymentStack(saleData.currency))
         display.transformation = placementService.rescaleTransformation(display.transformation, PAYMENT_ITEM_SCALE)
         persistence.setGroundItemState(display, GroundItemState.PAYMENT)
         persistence.setCurrency(display, saleData.currency)
         persistence.setPrice(display, saleData.price)
+        persistence.setPaymentMagicItemId(display, metadataService.getMagicItemId(originalStack))
+        persistence.setPaymentItemAmount(display, originalStack.amount)
         displayService.ensureDisplayFace(display)
         if (displayService.syncCompanionText(display)) {
             return true
@@ -253,6 +254,8 @@ internal class GroundItemCommerceService(
         persistence.setGroundItemState(display, originalState)
         persistence.setCurrency(display, originalCurrency)
         persistence.setPrice(display, originalPrice)
+        persistence.setPaymentMagicItemId(display, originalPaymentMagicItemId)
+        persistence.setPaymentItemAmount(display, originalPaymentItemAmount)
         displayService.ensureDisplayFace(display)
         displayService.syncCompanionText(display)
         return false
@@ -333,6 +336,21 @@ internal class GroundItemCommerceService(
         val currency = persistence.getCurrency(display) ?: return null
         val price = persistence.getPrice(display) ?: return null
         return CommerceData(expectedState, currency, price)
+    }
+
+    private fun buildRedeemPaymentMessage(display: ItemDisplay, paymentData: CommerceData): Component {
+        val soldMagicItemId = persistence.getPaymentMagicItemId(display)
+        val soldAmount = persistence.getPaymentItemAmount(display)
+        val message = Component.text("Redeemed payment item for ", NamedTextColor.YELLOW)
+            .append(Component.text("${paymentData.price} ${paymentData.currency}", NamedTextColor.GOLD))
+
+        if (soldMagicItemId == null || soldAmount == null) {
+            return message
+        }
+
+        return message
+            .append(Component.text(" from selling ", NamedTextColor.YELLOW))
+            .append(Component.text("${soldAmount}x $soldMagicItemId", NamedTextColor.GOLD))
     }
 
     private fun copyTransformation(transformation: Transformation): Transformation {

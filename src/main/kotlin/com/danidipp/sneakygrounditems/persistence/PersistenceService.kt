@@ -27,6 +27,8 @@ internal class PersistenceService(plugin: Plugin) {
     private val stateKey = NamespacedKey(plugin, "ground_item_state")
     private val currencyKey = NamespacedKey(plugin, "ground_item_currency")
     private val priceKey = NamespacedKey(plugin, "ground_item_price")
+    private val paymentMagicItemIdKey = NamespacedKey(plugin, "ground_item_payment_magicitem_id")
+    private val paymentItemAmountKey = NamespacedKey(plugin, "ground_item_payment_item_amount")
     private val creatorNameKey = NamespacedKey(plugin, "ground_item_creator_name")
     private val permanentLockModeKey = NamespacedKey(plugin, "ground_item_lock_mode")
     private val legacyPermanentLockModeKey = legacyKey("ground_item_lock_mode")
@@ -105,6 +107,35 @@ internal class PersistenceService(plugin: Plugin) {
         data.set(priceKey, PersistentDataType.STRING, price.toString())
     }
 
+    fun getPaymentMagicItemId(entity: PersistentDataHolder): String? {
+        return entity.persistentDataContainer.get(paymentMagicItemIdKey, PersistentDataType.STRING)
+    }
+
+    fun setPaymentMagicItemId(entity: PersistentDataHolder, magicItemId: String?) {
+        val data = entity.persistentDataContainer
+        if (magicItemId.isNullOrBlank()) {
+            data.remove(paymentMagicItemIdKey)
+            return
+        }
+
+        data.set(paymentMagicItemIdKey, PersistentDataType.STRING, magicItemId)
+    }
+
+    fun getPaymentItemAmount(entity: PersistentDataHolder): Int? {
+        val rawValue = entity.persistentDataContainer.get(paymentItemAmountKey, PersistentDataType.STRING) ?: return null
+        return rawValue.toIntOrNull()?.takeIf { it > 0 }
+    }
+
+    fun setPaymentItemAmount(entity: PersistentDataHolder, amount: Int?) {
+        val data = entity.persistentDataContainer
+        if (amount == null || amount <= 0) {
+            data.remove(paymentItemAmountKey)
+            return
+        }
+
+        data.set(paymentItemAmountKey, PersistentDataType.STRING, amount.toString())
+    }
+
     fun getCreatorName(entity: PersistentDataHolder): String? {
         return entity.persistentDataContainer.get(creatorNameKey, PersistentDataType.STRING)
     }
@@ -153,6 +184,8 @@ internal class PersistenceService(plugin: Plugin) {
         setGroundItemState(entity, GroundItemState.NORMAL)
         setCurrency(entity, null)
         setPrice(entity, null)
+        setPaymentMagicItemId(entity, null)
+        setPaymentItemAmount(entity, null)
         setPartnerUuid(entity, null)
     }
 
