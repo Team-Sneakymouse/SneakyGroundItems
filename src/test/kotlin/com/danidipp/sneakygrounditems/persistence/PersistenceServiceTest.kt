@@ -1,10 +1,15 @@
 package com.danidipp.sneakygrounditems.persistence
 
 import com.danidipp.sneakygrounditems.commerce.Currency
+import com.danidipp.sneakygrounditems.lock.LockService
 import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.testutil.FakePersistentDataHolder
+import com.danidipp.sneakygrounditems.testutil.fakeItemDisplay
 import com.danidipp.sneakygrounditems.testutil.testPlugin
 import org.bukkit.block.BlockFace
+import org.bukkit.util.Transformation
+import org.joml.Quaternionf
+import org.joml.Vector3f
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -72,5 +77,22 @@ class PersistenceServiceTest {
         persistence.setCreatorName(holder, null)
 
         assertNull(persistence.getCreatorName(holder))
+    }
+
+    @Test
+    fun plotLockRoundTripsAsDistinctLockMode() {
+        val display = fakeItemDisplay(
+            Transformation(
+                Vector3f(),
+                Quaternionf(),
+                Vector3f(1f, 1f, 1f),
+                Quaternionf(),
+            ),
+        )
+
+        persistence.setPlotLock(display)
+
+        assertEquals(LockService.LockMode.PLOT, persistence.getLockMode(display))
+        assertNull(persistence.getTemporaryLockDate(display))
     }
 }

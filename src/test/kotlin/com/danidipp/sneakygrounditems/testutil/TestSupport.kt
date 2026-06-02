@@ -1,6 +1,7 @@
 package com.danidipp.sneakygrounditems.testutil
 
 import org.bukkit.NamespacedKey
+import org.bukkit.Location
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.persistence.PersistentDataAdapterContext
 import org.bukkit.persistence.PersistentDataContainer
@@ -88,9 +89,13 @@ internal class FakePersistentDataContainer : PersistentDataContainer {
 }
 
 internal fun fakeItemDisplay(transformation: Transformation): ItemDisplay {
+    val container = FakePersistentDataContainer()
+    val location = Location(null, 0.0, 0.0, 0.0)
     val handler = java.lang.reflect.InvocationHandler { _, method, _ ->
         when (method.name) {
             "getTransformation" -> transformation
+            "getPersistentDataContainer" -> container
+            "getLocation" -> location
             "toString" -> "FakeItemDisplay($transformation)"
             else -> defaultValue(method.returnType)
         }

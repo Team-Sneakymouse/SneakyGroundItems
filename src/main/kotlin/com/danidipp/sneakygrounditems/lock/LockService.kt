@@ -24,6 +24,7 @@ internal class LockService(
     enum class LockMode {
         NONE,
         TEMPORARY,
+        PLOT,
         PERMANENT,
     }
 
@@ -34,6 +35,11 @@ internal class LockService(
             LockMode.PERMANENT -> {
                 persistence.setPermanentLock(display)
                 LockMode.PERMANENT
+            }
+
+            LockMode.PLOT -> {
+                persistence.setPlotLock(display)
+                LockMode.PLOT
             }
 
             else -> {
@@ -65,6 +71,13 @@ internal class LockService(
         persistence.clearTemporaryLock(display)
     }
 
+    fun clearInvalidPlotLock(display: ItemDisplay) {
+        if (persistence.getLockMode(display) != LockMode.PLOT) return
+        if (hasPriorityFivePlotAt(display.location)) return
+
+        persistence.clearLock(display)
+    }
+
     fun formatBoundMessage(stack: ItemStack, temporary: Boolean): Component {
         val suffix = if (temporary) {
             " is now bound in place for the rest of the day"
@@ -89,7 +102,7 @@ internal class LockService(
     private fun determineLockMode(actor: CommandSender, location: Location): LockMode {
         val player = actor as? Player
         if (player != null && isPlotMember(player, location)) {
-            return LockMode.PERMANENT
+            return LockMode.PLOT
         }
         if (actor.hasPermission(Command.ADMIN_PERMISSION) && player?.gameMode == GameMode.CREATIVE) {
             return LockMode.PERMANENT
@@ -110,9 +123,18 @@ internal class LockService(
         return priorityFivePlotsAt(location).minByOrNull { it.id }
     }
 
+    private fun hasPriorityFivePlotAt(location: Location): Boolean {
+        return priorityFivePlotsAt(location).isNotEmpty()
+    }
+
     private fun priorityFivePlotsAt(location: Location): List<ProtectedRegion> {
         val world = location.world ?: return emptyList()
-        val regionManager = WorldGuard.getInstance().platform.regionContainer[BukkitAdapter.adapt(world)] ?: return emptyList()
+        val worldGuardPlugin = Bukkit.getPluginManager().getPlugin("WorldGuard") as? WorldGuardPlugin ?: return emptyList()
+        if (!worldGuardPlugin.isEnabled) return emptyList()
+
+        val regionManager = runCatching {
+            WorldGuard.getInstance().platform.regionContainer[BukkitAdapter.adapt(world)]
+        }.getOrNull() ?: return emptyList()
         val applicableRegions = regionManager.getApplicableRegions(BlockVector3.at(location.x, location.y, location.z))
 
         return applicableRegions

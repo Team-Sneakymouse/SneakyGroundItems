@@ -191,6 +191,7 @@ internal class PersistenceService(plugin: Plugin) {
 
     fun getLockMode(entity: PersistentDataHolder): LockService.LockMode {
         return when {
+            getString(entity, permanentLockModeKey, legacyPermanentLockModeKey) == PLOT_LOCK_VALUE -> LockService.LockMode.PLOT
             getString(entity, permanentLockModeKey, legacyPermanentLockModeKey) == PERMANENT_LOCK_VALUE -> LockService.LockMode.PERMANENT
             getString(entity, temporaryLockDateKey, legacyTemporaryLockDateKey) != null -> LockService.LockMode.TEMPORARY
             else -> LockService.LockMode.NONE
@@ -203,6 +204,12 @@ internal class PersistenceService(plugin: Plugin) {
 
     fun setPermanentLock(display: ItemDisplay) {
         writeString(display, permanentLockModeKey, PERMANENT_LOCK_VALUE)
+        removeString(display, legacyPermanentLockModeKey)
+        clearTemporaryLock(display)
+    }
+
+    fun setPlotLock(display: ItemDisplay) {
+        writeString(display, permanentLockModeKey, PLOT_LOCK_VALUE)
         removeString(display, legacyPermanentLockModeKey)
         clearTemporaryLock(display)
     }
@@ -338,6 +345,7 @@ internal class PersistenceService(plugin: Plugin) {
         const val KIND_TEXT = "text"
         const val KIND_INTERACTION = "interaction"
         const val PERMANENT_LOCK_VALUE = "permanent"
+        const val PLOT_LOCK_VALUE = "plot"
         const val GROUND_ITEM_TAG = "grounditem"
     }
 }

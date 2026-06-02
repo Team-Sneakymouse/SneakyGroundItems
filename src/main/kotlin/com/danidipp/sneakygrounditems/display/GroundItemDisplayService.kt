@@ -51,6 +51,7 @@ internal class GroundItemDisplayService(
                     entity.viewRange = Constants.ITEM_DISPLAY_VIEW_RANGE
                     displays += entity
                     lockService.clearExpiredTemporaryLock(entity)
+                    lockService.clearInvalidPlotLock(entity)
                 }
 
                 entity is TextDisplay && persistence.isGroundItemText(entity) -> {
