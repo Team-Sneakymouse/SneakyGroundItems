@@ -20,6 +20,7 @@ import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
 import com.nisovin.magicspells.util.magicitems.MagicItems
+import com.sneakybagofholding.api.BagOfHoldingApi
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.ItemDisplay
@@ -213,7 +214,8 @@ internal class GroundItemCommerceService(
     private fun restoreSoldItemForSale(player: Player, paymentDisplay: ItemDisplay, paymentData: CommerceData) {
         val soldMagicItemId = persistence.getPaymentMagicItemId(paymentDisplay) ?: return
         val soldAmount = persistence.getPaymentItemAmount(paymentDisplay) ?: return
-        val replacementStack = buildReplacementStack(player, soldMagicItemId, soldAmount) ?: return
+        val replacementPlan = buildReplacementPlan(player, soldMagicItemId, soldAmount) ?: return
+        val replacementStack = replacementPlan.stack
         val face = persistence.getFace(paymentDisplay) ?: placementService.deriveFace(paymentDisplay)
         val placement = PlacementService.Placement(
             location = paymentDisplay.location.clone(),
@@ -225,7 +227,10 @@ internal class GroundItemCommerceService(
         )
 
         val replacementDisplay = placementService.spawnDisplayEntity(placement, replacementStack, player.name) ?: return
-        consumeMagicItems(player, soldMagicItemId, soldAmount)
+        if (!consumeReplacementSources(player, soldMagicItemId, replacementPlan)) {
+            persistence.removeDisplay(replacementDisplay)
+            return
+        }
 
         Bukkit.getScheduler().runTaskLater(plugin, Runnable {
             val resolvedDisplay = persistence.resolveDisplay(replacementDisplay.uniqueId) ?: return@Runnable
@@ -236,8 +241,8 @@ internal class GroundItemCommerceService(
         }, 1L)
     }
 
-    private fun buildReplacementStack(player: Player, magicItemId: String, amount: Int): ItemStack? {
-        var remaining = amount
+    private fun buildReplacementPlan(player: Player, magicItemId: String, amount: Int): ReplacementPlan? {
+        var inventoryAmount = 0
         var template: ItemStack? = null
 
         for (stack in player.inventory.contents.filterNotNull()) {
@@ -246,13 +251,69 @@ internal class GroundItemCommerceService(
             if (template == null) {
                 template = stack.clone()
             }
-            remaining -= stack.amount
-            if (remaining <= 0) {
-                return template.clone().apply { this.amount = amount }
+            inventoryAmount += stack.amount
+        }
+
+        val inventoryAmountToConsume = inventoryAmount.coerceAtMost(amount)
+        val bagAmountToWithdraw = amount - inventoryAmountToConsume
+        val api = if (bagAmountToWithdraw > 0) {
+            runCatching { BagOfHoldingApi.get() }.getOrNull() ?: return null
+        } else {
+            null
+        }
+
+        if (api != null) {
+            val storedAmount = runCatching { api.getStoredAmount(player, magicItemId) }.getOrDefault(0)
+            if (storedAmount < bagAmountToWithdraw) {
+                return null
             }
         }
 
-        return null
+        val replacementStack = template
+            ?.clone()
+            ?: createMagicItemStack(magicItemId)
+            ?: return null
+
+        return ReplacementPlan(
+            stack = replacementStack.apply { this.amount = amount },
+            inventoryAmountToConsume = inventoryAmountToConsume,
+            bagAmountToWithdraw = bagAmountToWithdraw,
+            bagApi = api,
+        )
+    }
+
+    private fun consumeReplacementSources(player: Player, magicItemId: String, replacementPlan: ReplacementPlan): Boolean {
+        if (replacementPlan.inventoryAmountToConsume > 0 &&
+            countInventoryMagicItems(player, magicItemId) < replacementPlan.inventoryAmountToConsume
+        ) {
+            return false
+        }
+
+        if (replacementPlan.bagAmountToWithdraw > 0) {
+            val api = replacementPlan.bagApi ?: return false
+            runCatching {
+                api.withdrawAsItemStack(player, magicItemId, replacementPlan.bagAmountToWithdraw).itemStackOrNull()
+            }.getOrNull() ?: return false
+        }
+
+        if (replacementPlan.inventoryAmountToConsume > 0) {
+            consumeMagicItems(player, magicItemId, replacementPlan.inventoryAmountToConsume)
+        }
+
+        return true
+    }
+
+    private fun createMagicItemStack(magicItemId: String): ItemStack? {
+        return MagicItems.getMagicItemByInternalName(magicItemId)
+            ?.itemStack
+            ?.clone()
+    }
+
+    private fun countInventoryMagicItems(player: Player, magicItemId: String): Int {
+        return player.inventory.contents
+            .filterNotNull()
+            .filter { metadataService.getMagicItemId(it) == magicItemId }
+            .sumOf { it.amount }
     }
 
     private fun consumeMagicItems(player: Player, magicItemId: String, amount: Int) {
@@ -420,7 +481,7 @@ internal class GroundItemCommerceService(
     private fun buildRedeemPaymentMessage(display: ItemDisplay, paymentData: CommerceData): Component {
         val soldMagicItemId = persistence.getPaymentMagicItemId(display)
         val soldAmount = persistence.getPaymentItemAmount(display)
-        val message = Component.text("You gained  ", NamedTextColor.YELLOW)
+        val message = Component.text("You gained ", NamedTextColor.YELLOW)
             .append(Component.text("${paymentData.price} ${paymentData.currency}", NamedTextColor.GOLD))
 
         if (soldMagicItemId == null || soldAmount == null) {
@@ -454,6 +515,14 @@ internal class GroundItemCommerceService(
         val currency: Currency,
         val price: Int,
     )
+
+    private data class ReplacementPlan(
+        val stack: ItemStack,
+        val inventoryAmountToConsume: Int,
+        val bagAmountToWithdraw: Int,
+        val bagApi: BagOfHoldingApi?,
+    )
+
     companion object {
         private const val PAYMENT_ITEM_SCALE = 0.5f
         private const val BANK_EPSILON = 1.0e-6
