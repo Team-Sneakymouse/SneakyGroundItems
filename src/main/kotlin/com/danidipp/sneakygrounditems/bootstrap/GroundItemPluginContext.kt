@@ -45,6 +45,7 @@ internal data class GroundItemPluginContext(
             val displayService = GroundItemDisplayService(persistence, lockService, placementService, metadataService)
             val migrationService = GroundItemMigrationService(plugin, persistence)
             val commerceService = GroundItemCommerceService(
+                plugin = plugin,
                 persistence = persistence,
                 lockService = lockService,
                 placementService = placementService,

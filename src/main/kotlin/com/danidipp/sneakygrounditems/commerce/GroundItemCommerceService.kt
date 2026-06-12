@@ -19,11 +19,13 @@ import com.danidipp.sneakygrounditems.model.GroundItemCommandResult
 import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
+import com.nisovin.magicspells.util.magicitems.MagicItems
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import org.bukkit.plugin.Plugin
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
 import org.joml.Vector3f
@@ -32,6 +34,7 @@ import java.math.RoundingMode
 import java.util.UUID
 
 internal class GroundItemCommerceService(
+    private val plugin: Plugin,
     private val persistence: PersistenceService,
     private val lockService: LockService,
     private val placementService: PlacementService,
@@ -76,13 +79,7 @@ internal class GroundItemCommerceService(
             return GroundItemCommandResult(false, Component.text("You must be a plot member where the ground item is placed"))
         }
 
-        persistence.setGroundItemState(display, GroundItemState.SALE)
-        persistence.setCurrency(display, currency)
-        persistence.setPrice(display, price)
-        displayService.ensureDisplayFace(display)
-
-        if (!displayService.syncCompanionText(display)) {
-            displayService.normalizeDisplay(display)
+        if (!markGroundItemForSale(display, price, currency)) {
             return GroundItemCommandResult(false, Component.text("Failed to create the sale display text"))
         }
 
@@ -95,6 +92,20 @@ internal class GroundItemCommerceService(
         }
         val message = display.itemStack.displayName().append(Component.text(messageSuffix, NamedTextColor.YELLOW))
         return GroundItemCommandResult(true, message)
+    }
+
+    fun markGroundItemForSale(display: ItemDisplay, price: Int, currency: Currency): Boolean {
+        persistence.setGroundItemState(display, GroundItemState.SALE)
+        persistence.setCurrency(display, currency)
+        persistence.setPrice(display, price)
+        displayService.ensureDisplayFace(display)
+
+        if (displayService.syncCompanionText(display)) {
+            return true
+        }
+
+        displayService.normalizeDisplay(display)
+        return false
     }
 
     fun openPurchaseMenu(player: Player, display: ItemDisplay) {
@@ -190,11 +201,79 @@ internal class GroundItemCommerceService(
                 return
             }
 
+            restoreSoldItemForSale(player, display, paymentData)
             displayService.removeDisplayAndCompanion(display)
             effectsService.playUiSound(player, "lom:buy")
             player.sendMessage(buildRedeemPaymentMessage(display, paymentData))
         } finally {
             runtimeState.finishDisplayResolution(displayUuid)
+        }
+    }
+
+    private fun restoreSoldItemForSale(player: Player, paymentDisplay: ItemDisplay, paymentData: CommerceData) {
+        val soldMagicItemId = persistence.getPaymentMagicItemId(paymentDisplay) ?: return
+        val soldAmount = persistence.getPaymentItemAmount(paymentDisplay) ?: return
+        val replacementStack = buildReplacementStack(player, soldMagicItemId, soldAmount) ?: return
+        val face = persistence.getFace(paymentDisplay) ?: placementService.deriveFace(paymentDisplay)
+        val placement = PlacementService.Placement(
+            location = paymentDisplay.location.clone(),
+            transformation = placementService.rescaleTransformation(
+                paymentDisplay.transformation,
+                placementService.scaleForStack(replacementStack),
+            ),
+            face = face,
+        )
+
+        val replacementDisplay = placementService.spawnDisplayEntity(placement, replacementStack, player.name) ?: return
+        consumeMagicItems(player, soldMagicItemId, soldAmount)
+
+        Bukkit.getScheduler().runTaskLater(plugin, Runnable {
+            val resolvedDisplay = persistence.resolveDisplay(replacementDisplay.uniqueId) ?: return@Runnable
+            if (!persistence.isGroundItemDisplay(resolvedDisplay)) return@Runnable
+            if (persistence.getGroundItemState(resolvedDisplay) != GroundItemState.NORMAL) return@Runnable
+
+            markGroundItemForSale(resolvedDisplay, paymentData.price, paymentData.currency)
+        }, 1L)
+    }
+
+    private fun buildReplacementStack(player: Player, magicItemId: String, amount: Int): ItemStack? {
+        var remaining = amount
+        var template: ItemStack? = null
+
+        for (stack in player.inventory.contents.filterNotNull()) {
+            if (metadataService.getMagicItemId(stack) != magicItemId) continue
+
+            if (template == null) {
+                template = stack.clone()
+            }
+            remaining -= stack.amount
+            if (remaining <= 0) {
+                return template.clone().apply { this.amount = amount }
+            }
+        }
+
+        return null
+    }
+
+    private fun consumeMagicItems(player: Player, magicItemId: String, amount: Int) {
+        var remaining = amount
+        val inventory = player.inventory
+
+        for (slot in inventory.contents.indices) {
+            if (remaining <= 0) return
+
+            val stack = inventory.getItem(slot) ?: continue
+            if (metadataService.getMagicItemId(stack) != magicItemId) continue
+
+            val consumed = minOf(stack.amount, remaining)
+            remaining -= consumed
+
+            if (stack.amount == consumed) {
+                inventory.setItem(slot, null)
+            } else {
+                stack.amount -= consumed
+                inventory.setItem(slot, stack)
+            }
         }
     }
 
@@ -341,16 +420,24 @@ internal class GroundItemCommerceService(
     private fun buildRedeemPaymentMessage(display: ItemDisplay, paymentData: CommerceData): Component {
         val soldMagicItemId = persistence.getPaymentMagicItemId(display)
         val soldAmount = persistence.getPaymentItemAmount(display)
-        val message = Component.text("Redeemed payment item for ", NamedTextColor.YELLOW)
+        val message = Component.text("You gained  ", NamedTextColor.YELLOW)
             .append(Component.text("${paymentData.price} ${paymentData.currency}", NamedTextColor.GOLD))
 
         if (soldMagicItemId == null || soldAmount == null) {
             return message
         }
 
+        val soldMagicItem = MagicItems.getMagicItemByInternalName(soldMagicItemId)
+        if (soldMagicItem == null) {
+            return message
+                .append(Component.text(" from selling ", NamedTextColor.YELLOW))
+                .append(Component.text("an unknown item (ID: $soldMagicItemId)", NamedTextColor.RED))
+        }
+
         return message
             .append(Component.text(" from selling ", NamedTextColor.YELLOW))
-            .append(Component.text("${soldAmount}x $soldMagicItemId", NamedTextColor.GOLD))
+            .append(Component.text("${soldAmount}x ", NamedTextColor.GOLD))
+            .append(soldMagicItem.itemStack.displayName())
     }
 
     private fun copyTransformation(transformation: Transformation): Transformation {

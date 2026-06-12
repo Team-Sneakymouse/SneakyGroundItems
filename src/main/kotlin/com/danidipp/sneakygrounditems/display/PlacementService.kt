@@ -40,6 +40,10 @@ internal class PlacementService(
     }
 
     fun spawnDisplay(placement: Placement, stack: ItemStack, creatorName: String): Boolean {
+        return spawnDisplayEntity(placement, stack, creatorName) != null
+    }
+
+    fun spawnDisplayEntity(placement: Placement, stack: ItemStack, creatorName: String): ItemDisplay? {
         var display: ItemDisplay? = null
 
         return runCatching {
@@ -57,10 +61,10 @@ internal class PlacementService(
                 persistence.setCreatorName(itemDisplay, creatorName)
             }
 
-            true
+            display
         }.getOrElse {
             display?.remove()
-            false
+            null
         }
     }
 
