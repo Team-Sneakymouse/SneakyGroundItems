@@ -15,6 +15,7 @@ object Constants {
     const val MERGE_SEARCH_RADIUS = 0.25
     const val MIN_SELECTION_RADIUS = 0.25
     const val MAX_SELECTION_RADIUS = 1.0
+    const val PLOT_SALE_ITEM_LIMIT = 250
     const val MIGRATION_MIN_BLOCK = 4000
     const val MIGRATION_MAX_BLOCK = 6000
     const val MIGRATION_BATCH_SIZE = 8

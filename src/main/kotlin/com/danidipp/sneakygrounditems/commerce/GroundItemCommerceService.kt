@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
 import com.danidipp.sneakygrounditems.command.Command
+import com.danidipp.sneakygrounditems.config.Constants
 import com.danidipp.sneakygrounditems.display.GroundItemDisplayService
 import com.danidipp.sneakygrounditems.display.PlacementService
 import com.danidipp.sneakygrounditems.integration.coreprotect.GroundItemAuditService
@@ -21,11 +22,13 @@ import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
 import com.nisovin.magicspells.util.magicitems.MagicItems
 import com.sneakybagofholding.api.BagOfHoldingApi
+import com.sk89q.worldedit.math.BlockVector3
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.meta.Damageable
 import org.bukkit.plugin.Plugin
 import org.bukkit.util.Transformation
 import org.joml.Quaternionf
@@ -78,6 +81,12 @@ internal class GroundItemCommerceService(
         }
         if (!lockService.isPlotMember(player, display.location)) {
             return GroundItemCommandResult(false, Component.text("You must be a plot member where the ground item is placed"))
+        }
+        if (state != GroundItemState.SALE) {
+            val limitFailure = plotSaleItemLimitFailure(display)
+            if (limitFailure != null) {
+                return GroundItemCommandResult(false, limitFailure)
+            }
         }
 
         if (!markGroundItemForSale(display, price, currency)) {
@@ -202,7 +211,9 @@ internal class GroundItemCommerceService(
                 return
             }
 
-            restoreSoldItemForSale(player, display, paymentData)
+            if (plotSaleItemLimitFailure(display) == null) {
+                restoreSoldItemForSale(player, display, paymentData)
+            }
             displayService.removeDisplayAndCompanion(display)
             effectsService.playUiSound(player, "lom:buy")
             player.sendMessage(buildRedeemPaymentMessage(display, paymentData))
@@ -247,6 +258,7 @@ internal class GroundItemCommerceService(
 
         for (stack in player.inventory.contents.filterNotNull()) {
             if (metadataService.getMagicItemId(stack) != magicItemId) continue
+            if (!hasFullDurability(stack)) continue
 
             if (template == null) {
                 template = stack.clone()
@@ -303,6 +315,31 @@ internal class GroundItemCommerceService(
         return true
     }
 
+    private fun plotSaleItemLimitFailure(display: ItemDisplay): Component? {
+        val plot = lockService.findPriorityFivePlotAt(display.location) ?: return null
+        val world = display.world
+        val saleItemCount = world.loadedChunks.asSequence()
+            .flatMap { chunk -> chunk.entities.asSequence() }
+            .filterIsInstance<ItemDisplay>()
+            .filter(persistence::isGroundItemDisplay)
+            .filter { it.world == world }
+            .filter { persistence.getGroundItemState(it) == GroundItemState.SALE }
+            .filter { plot.contains(BlockVector3.at(it.location.blockX, it.location.blockY, it.location.blockZ)) }
+            .count()
+
+        return when {
+            saleItemCount == Constants.PLOT_SALE_ITEM_LIMIT -> {
+                Component.text("This plot is at the limit for sale items (${Constants.PLOT_SALE_ITEM_LIMIT})")
+            }
+
+            saleItemCount > Constants.PLOT_SALE_ITEM_LIMIT -> {
+                Component.text("This plot is over the limit for sale items ($saleItemCount/${Constants.PLOT_SALE_ITEM_LIMIT})")
+            }
+
+            else -> null
+        }
+    }
+
     private fun createMagicItemStack(magicItemId: String): ItemStack? {
         return MagicItems.getMagicItemByInternalName(magicItemId)
             ?.itemStack
@@ -313,7 +350,13 @@ internal class GroundItemCommerceService(
         return player.inventory.contents
             .filterNotNull()
             .filter { metadataService.getMagicItemId(it) == magicItemId }
+            .filter(::hasFullDurability)
             .sumOf { it.amount }
+    }
+
+    private fun hasFullDurability(stack: ItemStack): Boolean {
+        val damageable = stack.itemMeta as? Damageable ?: return true
+        return !damageable.hasDamage() || damageable.damage == 0
     }
 
     private fun consumeMagicItems(player: Player, magicItemId: String, amount: Int) {
@@ -325,6 +368,7 @@ internal class GroundItemCommerceService(
 
             val stack = inventory.getItem(slot) ?: continue
             if (metadataService.getMagicItemId(stack) != magicItemId) continue
+            if (!hasFullDurability(stack)) continue
 
             val consumed = minOf(stack.amount, remaining)
             remaining -= consumed
