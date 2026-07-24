@@ -4,6 +4,7 @@ import com.danidipp.sneakygrounditems.SneakyGroundItems
 import com.danidipp.sneakygrounditems.display.GroundItemDisplayService
 import com.danidipp.sneakygrounditems.display.PlacementService
 import com.danidipp.sneakygrounditems.integration.magicspells.GroundItemMetadataService
+import com.danidipp.sneakygrounditems.integration.magicspells.MagicSpellsCommands
 import com.danidipp.sneakygrounditems.interaction.GroundItemLookupService
 import com.danidipp.sneakygrounditems.model.GroundItemCommandResult
 import com.danidipp.sneakygrounditems.model.GroundItemPolicy
@@ -75,6 +76,10 @@ internal class GroundItemTheftService(
             for (overflow in player.inventory.addItem(stolenGoods).values) {
                 player.world.dropItemNaturally(player.location, overflow)
             }
+            Bukkit.dispatchCommand(
+                Bukkit.getConsoleSender(),
+                MagicSpellsCommands.shopliftCost(player.name),
+            )
             return GroundItemCommandResult(true, Component.text("You stole the sale item"))
         } finally {
             runtimeState.finishDisplayResolution(displayUuid)
@@ -107,7 +112,7 @@ internal class GroundItemTheftService(
                 return
             }
 
-            val command = "ms cast as ${player.name} crime-shoplifting-gponotice"
+            val command = MagicSpellsCommands.shopliftingNotice(player.name)
             if (!Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command)) {
                 plugin.logger.warning("Restored stolen ground item $displayUuid, but console command failed: /$command")
             }
