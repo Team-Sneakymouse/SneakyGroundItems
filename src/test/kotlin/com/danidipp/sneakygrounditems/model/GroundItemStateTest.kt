@@ -10,6 +10,7 @@ class GroundItemStateTest {
     @Test
     fun fromIdResolvesKnownState() {
         assertEquals(GroundItemState.SALE, GroundItemState.fromId("sale"))
+        assertEquals(GroundItemState.STOLEN, GroundItemState.fromId("stolen"))
     }
 
     @Test
@@ -22,5 +23,6 @@ class GroundItemStateTest {
         assertFalse(GroundItemState.NORMAL.isLockedLike)
         assertTrue(GroundItemState.SALE.isLockedLike)
         assertTrue(GroundItemState.PAYMENT.isLockedLike)
+        assertTrue(GroundItemState.STOLEN.isLockedLike)
     }
 }

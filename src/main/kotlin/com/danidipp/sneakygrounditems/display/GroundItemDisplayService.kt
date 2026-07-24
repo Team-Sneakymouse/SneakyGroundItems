@@ -70,7 +70,21 @@ internal class GroundItemDisplayService(
             reconcileCommerceDisplay(display, companionTextByPartner.remove(display.uniqueId).orEmpty())
         }
 
-        for (orphanGroup in companionTextByPartner.values) {
+        for ((partnerUuid, orphanGroup) in companionTextByPartner) {
+            val partner = persistence.resolveDisplay(partnerUuid)
+            if (partner == null) {
+                for (orphan in orphanGroup) {
+                    persistence.removeTextDisplay(orphan)
+                }
+                continue
+            }
+            if (
+                persistence.isGroundItemDisplay(partner) &&
+                persistence.getGroundItemState(partner) == GroundItemState.STOLEN &&
+                persistence.getSaleSnapshot(partner) == null
+            ) {
+                continue
+            }
             for (orphan in orphanGroup) {
                 persistence.removeTextDisplay(orphan)
             }
@@ -84,6 +98,7 @@ internal class GroundItemDisplayService(
             return true
         }
 
+        if (state == GroundItemState.STOLEN && persistence.getSaleSnapshot(display) == null) return false
         val commerceData = readCommerceData(display, state) ?: return false
         val face = ensureDisplayFace(display)
         rescaleForCommerceState(display, state)
@@ -137,6 +152,7 @@ internal class GroundItemDisplayService(
             return
         }
 
+        if (state == GroundItemState.STOLEN && persistence.getSaleSnapshot(display) == null) return
         val commerceData = readCommerceData(display, state)
         if (commerceData == null) {
             reconcileNormalDisplay(display, candidates)
@@ -263,6 +279,7 @@ internal class GroundItemDisplayService(
             }
 
             GroundItemState.PAYMENT -> Component.text("${commerceData.price} ${commerceData.currency}")
+            GroundItemState.STOLEN -> GroundItemDisplayText.stolenItem()
             GroundItemState.NORMAL -> Component.empty()
         }
     }

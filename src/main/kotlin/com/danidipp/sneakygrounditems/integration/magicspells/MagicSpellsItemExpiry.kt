@@ -7,6 +7,10 @@ import org.bukkit.persistence.PersistentDataType
 internal object MagicSpellsItemExpiry {
     private val expiresAtKey = NamespacedKey("magicspells", "expires_at")
 
+    fun hasExpiry(holder: PersistentDataHolder): Boolean {
+        return holder.persistentDataContainer.has(expiresAtKey, PersistentDataType.LONG)
+    }
+
     fun isExpired(holder: PersistentDataHolder, nowMillis: Long = System.currentTimeMillis()): Boolean {
         val expiresAtMillis = getExpiresAtMillis(holder) ?: return false
         return expiresAtMillis <= nowMillis

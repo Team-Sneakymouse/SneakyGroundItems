@@ -3,6 +3,7 @@ package com.danidipp.sneakygrounditems.bootstrap
 import com.danidipp.sneakygrounditems.SneakyGroundItems
 import com.danidipp.sneakygrounditems.commerce.BankService
 import com.danidipp.sneakygrounditems.commerce.GroundItemCommerceService
+import com.danidipp.sneakygrounditems.commerce.GroundItemTheftService
 import com.danidipp.sneakygrounditems.display.GroundItemDisplayService
 import com.danidipp.sneakygrounditems.display.PlacementService
 import com.danidipp.sneakygrounditems.integration.coreprotect.GroundItemAuditService
@@ -29,6 +30,7 @@ internal data class GroundItemPluginContext(
     val displayService: GroundItemDisplayService,
     val migrationService: GroundItemMigrationService,
     val commerceService: GroundItemCommerceService,
+    val theftService: GroundItemTheftService,
     val interactionService: GroundItemInteractionService,
 ) {
     companion object {
@@ -58,6 +60,15 @@ internal data class GroundItemPluginContext(
                 effectsService = effectsService,
                 auditService = auditService,
             )
+            val theftService = GroundItemTheftService(
+                plugin = plugin,
+                persistence = persistence,
+                placementService = placementService,
+                displayService = displayService,
+                metadataService = metadataService,
+                lookupService = lookupService,
+                runtimeState = runtimeState,
+            )
             val interactionService = GroundItemInteractionService(
                 plugin = plugin,
                 persistence = persistence,
@@ -65,6 +76,7 @@ internal data class GroundItemPluginContext(
                 placementService = placementService,
                 displayService = displayService,
                 commerceService = commerceService,
+                theftService = theftService,
                 metadataService = metadataService,
                 lookupService = lookupService,
                 runtimeState = runtimeState,
@@ -86,6 +98,7 @@ internal data class GroundItemPluginContext(
                 displayService = displayService,
                 migrationService = migrationService,
                 commerceService = commerceService,
+                theftService = theftService,
                 interactionService = interactionService,
             )
         }

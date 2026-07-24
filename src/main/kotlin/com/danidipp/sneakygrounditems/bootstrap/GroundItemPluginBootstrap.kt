@@ -23,10 +23,11 @@ internal class GroundItemPluginBootstrap(
                     lookupService = context.lookupService,
                     interactionService = context.interactionService,
                     commerceService = context.commerceService,
+                    theftService = context.theftService,
                     migrationService = context.migrationService,
                     lockService = context.lockService,
                 ).build(),
-                "Lock, unlock, pop, or migrate placed ground items",
+                "Manage placed ground items",
             )
         }
 

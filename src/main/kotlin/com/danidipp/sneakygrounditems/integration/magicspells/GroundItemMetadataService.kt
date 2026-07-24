@@ -2,6 +2,7 @@ package com.danidipp.sneakygrounditems.integration.magicspells
 
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
+import org.bukkit.inventory.meta.Damageable
 import org.bukkit.persistence.PersistentDataHolder
 import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
@@ -20,6 +21,11 @@ internal class GroundItemMetadataService {
     fun hasExpiredMagicSpellsLifetime(stack: ItemStack, nowMillis: Long = System.currentTimeMillis()): Boolean {
         val meta = stack.itemMeta ?: return false
         return MagicSpellsItemExpiry.isExpired(meta, nowMillis)
+    }
+
+    fun hasMagicSpellsExpiry(stack: ItemStack): Boolean {
+        val meta = stack.itemMeta ?: return false
+        return MagicSpellsItemExpiry.hasExpiry(meta)
     }
 
     fun isExplicitlyUnsellable(stack: ItemStack): Boolean {
@@ -48,5 +54,10 @@ internal class GroundItemMetadataService {
     fun getMagicItemId(stack: ItemStack): String? {
         val meta = stack.itemMeta ?: return null
         return meta.persistentDataContainer.get(magicItemKey, PersistentDataType.STRING)
+    }
+
+    fun hasFullDurability(stack: ItemStack): Boolean {
+        val damageable = stack.itemMeta as? Damageable ?: return true
+        return !damageable.hasDamage() || damageable.damage == 0
     }
 }

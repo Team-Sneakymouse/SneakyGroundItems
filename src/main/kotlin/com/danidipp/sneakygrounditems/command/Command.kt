@@ -2,6 +2,7 @@ package com.danidipp.sneakygrounditems.command
 
 import com.danidipp.sneakygrounditems.commerce.Currency
 import com.danidipp.sneakygrounditems.commerce.GroundItemCommerceService
+import com.danidipp.sneakygrounditems.commerce.GroundItemTheftService
 import com.danidipp.sneakygrounditems.config.Constants
 import com.danidipp.sneakygrounditems.interaction.GroundItemInteractionService
 import com.danidipp.sneakygrounditems.interaction.GroundItemLookupService
@@ -33,6 +34,7 @@ internal class Command(
     private val lookupService: GroundItemLookupService,
     private val interactionService: GroundItemInteractionService,
     private val commerceService: GroundItemCommerceService,
+    private val theftService: GroundItemTheftService,
     private val migrationService: GroundItemMigrationService,
     private val lockService: LockService,
 ) {
@@ -58,15 +60,17 @@ internal class Command(
                     UNLOCK_PERMISSION,
                     POP_PERMISSION,
                     SELL_PERMISSION,
+                    STEAL_PERMISSION,
                     ADMIN_PERMISSION,
                     MODERATOR_PERMISSION,
                 )
             }
-            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|sell|migrate|check> ...") }
+            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|sell|steal|migrate|check> ...") }
             .then(buildLockCommand())
             .then(buildUnlockCommand())
             .then(buildPopCommand())
             .then(buildSellCommand())
+            .then(buildStealCommand())
             .then(buildMigrateCommand())
             .then(buildCheckCommand())
             .build()
@@ -123,6 +127,11 @@ internal class Command(
                 Commands.literal("dry")
                     .executes { migrate(it, dryRun = true) }
             )
+
+    private fun buildStealCommand(): LiteralArgumentBuilder<CommandSourceStack> =
+        Commands.literal("steal")
+            .requires { it.sender.hasPermission(STEAL_PERMISSION) }
+            .executes(::steal)
 
     private fun buildCheckCommand(): LiteralArgumentBuilder<CommandSourceStack> =
         Commands.literal("check")
@@ -205,7 +214,7 @@ internal class Command(
             )
         } else {
             if (persistence.getGroundItemState(display).isLockedLike) {
-                return fail(context, "Sale and payment ground items cannot be unlocked")
+                return fail(context, "Sale, payment, and stolen ground items cannot be unlocked")
             }
             if (lockService.getLockMode(display) == LockService.LockMode.NONE) {
                 sender.sendMessage(lockService.formatAlreadyUnboundMessage(display.itemStack))
@@ -225,6 +234,13 @@ internal class Command(
         val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem sell")
         val currency = Currency.fromId(currencyId) ?: return fail(context, "Unknown currency")
         val result = commerceService.sellGroundItem(player, amount, currency)
+        if (result.message != null) player.sendMessage(result.message)
+        return if (result.success) Command.SINGLE_SUCCESS else 0
+    }
+
+    private fun steal(context: CommandContext<CommandSourceStack>): Int {
+        val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem steal")
+        val result = theftService.stealGroundItem(player)
         if (result.message != null) player.sendMessage(result.message)
         return if (result.success) Command.SINGLE_SUCCESS else 0
     }
@@ -259,7 +275,8 @@ internal class Command(
         }
 
         context.source.sender.sendMessage(
-            "Range contains ${counts.total} ground items (${counts.sellable} sellable, ${counts.locked} locked)",
+            "Range contains ${counts.total} ground items " +
+                "(${counts.saleSlots} sale slots: ${counts.activeSales} active, ${counts.stolen} stolen; ${counts.locked} locked)",
         )
         return Command.SINGLE_SUCCESS
     }
@@ -274,7 +291,8 @@ internal class Command(
         }
 
         context.source.sender.sendMessage(
-            "${plot.id} contains ${counts.total} ground items (${counts.sellable} sellable, ${counts.locked} locked)",
+            "${plot.id} contains ${counts.total} ground items " +
+                "(${counts.saleSlots} sale slots: ${counts.activeSales} active, ${counts.stolen} stolen; ${counts.locked} locked)",
         )
         return Command.SINGLE_SUCCESS
     }
@@ -286,7 +304,8 @@ internal class Command(
         }
 
         context.source.sender.sendMessage(
-            "$resolvedName placed ${counts.total} grounditems (${counts.sellable} sellable, ${counts.locked} locked)",
+            "$resolvedName placed ${counts.total} grounditems " +
+                "(${counts.saleSlots} sale slots: ${counts.activeSales} active, ${counts.stolen} stolen; ${counts.locked} locked)",
         )
         return Command.SINGLE_SUCCESS
     }
@@ -333,11 +352,14 @@ internal class Command(
         return loadedGroundItemDisplays()
             .filter(predicate)
             .fold(GroundItemAuditCounts()) { counts, display ->
-                val sellable = isSellable(display)
+                val state = persistence.getGroundItemState(display)
+                val activeSale = state == GroundItemState.SALE
+                val stolen = state == GroundItemState.STOLEN
                 val locked = isLocked(display)
                 GroundItemAuditCounts(
                     total = counts.total + 1,
-                    sellable = counts.sellable + if (sellable) 1 else 0,
+                    activeSales = counts.activeSales + if (activeSale) 1 else 0,
+                    stolen = counts.stolen + if (stolen) 1 else 0,
                     locked = counts.locked + if (locked) 1 else 0,
                 )
             }
@@ -363,6 +385,7 @@ internal class Command(
     private fun statusSuffix(display: ItemDisplay): String {
         val suffixes = buildList {
             if (isSellable(display)) add("(sellable)")
+            if (persistence.getGroundItemState(display) == GroundItemState.STOLEN) add("(stolen)")
             if (isLocked(display)) add("(locked)")
         }
         return if (suffixes.isEmpty()) "" else " ${suffixes.joinToString(" ")}"
@@ -397,6 +420,7 @@ internal class Command(
         const val UNLOCK_PERMISSION = "sneakygrounditems.command.unlock"
         const val POP_PERMISSION = "sneakygrounditems.command.pop"
         const val SELL_PERMISSION = "sneakygrounditems.command.sell"
+        const val STEAL_PERMISSION = "sneakygrounditems.command.steal"
         const val ADMIN_PERMISSION = "sneakygrounditems.command.admin"
         const val MODERATOR_PERMISSION = "sneakygrounditems.command.moderator"
         const val MAX_SELL_PRICE = 999_999_999
@@ -405,7 +429,11 @@ internal class Command(
 
     private data class GroundItemAuditCounts(
         val total: Int = 0,
-        val sellable: Int = 0,
+        val activeSales: Int = 0,
+        val stolen: Int = 0,
         val locked: Int = 0,
-    )
+    ) {
+        val saleSlots: Int
+            get() = activeSales + stolen
+    }
 }

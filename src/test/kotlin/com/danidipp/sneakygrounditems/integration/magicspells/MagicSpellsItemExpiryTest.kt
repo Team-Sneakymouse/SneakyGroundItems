@@ -32,4 +32,12 @@ class MagicSpellsItemExpiryTest {
         assertTrue(MagicSpellsItemExpiry.isExpired(holder, nowMillis = 1_700_000_000_001L))
         assertFalse(MagicSpellsItemExpiry.isExpired(holder, nowMillis = 1_699_999_999_999L))
     }
+
+    @Test
+    fun expiryMetadataIsDetectedBeforeTheItemExpires() {
+        val holder = FakePersistentDataHolder()
+        holder.persistentDataContainer.set(expiresAtKey, PersistentDataType.LONG, 4_000_000_000L)
+
+        assertTrue(MagicSpellsItemExpiry.hasExpiry(holder))
+    }
 }

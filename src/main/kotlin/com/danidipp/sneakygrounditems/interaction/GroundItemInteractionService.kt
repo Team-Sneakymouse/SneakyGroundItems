@@ -3,6 +3,7 @@ package com.danidipp.sneakygrounditems.interaction
 import io.papermc.paper.event.player.PlayerPickItemEvent
 import com.danidipp.sneakygrounditems.SneakyGroundItems
 import com.danidipp.sneakygrounditems.commerce.GroundItemCommerceService
+import com.danidipp.sneakygrounditems.commerce.GroundItemTheftService
 import com.danidipp.sneakygrounditems.config.Constants
 import com.danidipp.sneakygrounditems.display.GroundItemDisplayService
 import com.danidipp.sneakygrounditems.display.PlacementService
@@ -37,6 +38,7 @@ internal class GroundItemInteractionService(
     private val placementService: PlacementService,
     private val displayService: GroundItemDisplayService,
     private val commerceService: GroundItemCommerceService,
+    private val theftService: GroundItemTheftService,
     private val metadataService: GroundItemMetadataService,
     private val lookupService: GroundItemLookupService,
     private val runtimeState: GroundItemRuntimeStateService,
@@ -119,6 +121,7 @@ internal class GroundItemInteractionService(
             GroundItemState.NORMAL -> handleNormalDisplayInteraction(player, display)
             GroundItemState.SALE -> commerceService.openPurchaseMenu(player, display)
             GroundItemState.PAYMENT -> handlePaymentInteraction(player, display)
+            GroundItemState.STOLEN -> handleStolenInteraction(player, display)
         }
     }
 
@@ -159,6 +162,15 @@ internal class GroundItemInteractionService(
         }
 
         commerceService.redeemPaymentDisplay(player, display)
+    }
+
+    private fun handleStolenInteraction(player: Player, display: ItemDisplay) {
+        if (!lockService.isPlotMember(player, display.location)) {
+            player.playEffect(display.location, Effect.SMOKE, BlockFace.UP)
+            return
+        }
+
+        theftService.restoreStolenGroundItem(player, display)
     }
 
     private fun popGroundItem(display: ItemDisplay) {

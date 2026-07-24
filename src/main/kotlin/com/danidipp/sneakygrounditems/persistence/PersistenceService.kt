@@ -3,6 +3,7 @@ package com.danidipp.sneakygrounditems.persistence
 import com.danidipp.sneakygrounditems.commerce.Currency
 import com.danidipp.sneakygrounditems.lock.LockService
 import com.danidipp.sneakygrounditems.model.GroundItemState
+import com.danidipp.sneakygrounditems.model.SaleSnapshot
 import org.bukkit.Bukkit
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.Entity
@@ -14,6 +15,7 @@ import org.bukkit.persistence.PersistentDataHolder
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import java.util.UUID
+import org.joml.Vector3f
 
 internal class PersistenceService(plugin: Plugin) {
     private val kindKey = NamespacedKey(plugin, "ground_item_kind")
@@ -27,8 +29,10 @@ internal class PersistenceService(plugin: Plugin) {
     private val stateKey = NamespacedKey(plugin, "ground_item_state")
     private val currencyKey = NamespacedKey(plugin, "ground_item_currency")
     private val priceKey = NamespacedKey(plugin, "ground_item_price")
-    private val paymentMagicItemIdKey = NamespacedKey(plugin, "ground_item_payment_magicitem_id")
-    private val paymentItemAmountKey = NamespacedKey(plugin, "ground_item_payment_item_amount")
+    // Persisted key names predate STOLEN and remain unchanged for PAYMENT compatibility.
+    private val saleMagicItemIdKey = NamespacedKey(plugin, "ground_item_payment_magicitem_id")
+    private val saleItemAmountKey = NamespacedKey(plugin, "ground_item_payment_item_amount")
+    private val saleOriginalScaleKey = NamespacedKey(plugin, "ground_item_sale_original_scale")
     private val creatorNameKey = NamespacedKey(plugin, "ground_item_creator_name")
     private val permanentLockModeKey = NamespacedKey(plugin, "ground_item_lock_mode")
     private val legacyPermanentLockModeKey = legacyKey("ground_item_lock_mode")
@@ -107,33 +111,76 @@ internal class PersistenceService(plugin: Plugin) {
         data.set(priceKey, PersistentDataType.STRING, price.toString())
     }
 
-    fun getPaymentMagicItemId(entity: PersistentDataHolder): String? {
-        return entity.persistentDataContainer.get(paymentMagicItemIdKey, PersistentDataType.STRING)
+    fun getSaleMagicItemId(entity: PersistentDataHolder): String? {
+        return entity.persistentDataContainer.get(saleMagicItemIdKey, PersistentDataType.STRING)
     }
 
-    fun setPaymentMagicItemId(entity: PersistentDataHolder, magicItemId: String?) {
+    fun setSaleMagicItemId(entity: PersistentDataHolder, magicItemId: String?) {
         val data = entity.persistentDataContainer
         if (magicItemId.isNullOrBlank()) {
-            data.remove(paymentMagicItemIdKey)
+            data.remove(saleMagicItemIdKey)
             return
         }
 
-        data.set(paymentMagicItemIdKey, PersistentDataType.STRING, magicItemId)
+        data.set(saleMagicItemIdKey, PersistentDataType.STRING, magicItemId)
     }
 
-    fun getPaymentItemAmount(entity: PersistentDataHolder): Int? {
-        val rawValue = entity.persistentDataContainer.get(paymentItemAmountKey, PersistentDataType.STRING) ?: return null
+    fun getSaleItemAmount(entity: PersistentDataHolder): Int? {
+        val rawValue = entity.persistentDataContainer.get(saleItemAmountKey, PersistentDataType.STRING) ?: return null
         return rawValue.toIntOrNull()?.takeIf { it > 0 }
     }
 
-    fun setPaymentItemAmount(entity: PersistentDataHolder, amount: Int?) {
+    fun setSaleItemAmount(entity: PersistentDataHolder, amount: Int?) {
         val data = entity.persistentDataContainer
         if (amount == null || amount <= 0) {
-            data.remove(paymentItemAmountKey)
+            data.remove(saleItemAmountKey)
             return
         }
 
-        data.set(paymentItemAmountKey, PersistentDataType.STRING, amount.toString())
+        data.set(saleItemAmountKey, PersistentDataType.STRING, amount.toString())
+    }
+
+    fun getSaleSnapshot(entity: PersistentDataHolder): SaleSnapshot? {
+        val magicItemId = getSaleMagicItemId(entity) ?: return null
+        val itemAmount = getSaleItemAmount(entity) ?: return null
+        val currency = getCurrency(entity) ?: return null
+        val price = getPrice(entity) ?: return null
+        val originalScale = getOriginalSaleScale(entity) ?: return null
+        return SaleSnapshot(magicItemId, itemAmount, currency, price, originalScale)
+    }
+
+    fun setSaleSnapshot(entity: PersistentDataHolder, snapshot: SaleSnapshot?) {
+        if (snapshot == null) {
+            setSaleMagicItemId(entity, null)
+            setSaleItemAmount(entity, null)
+            setOriginalSaleScale(entity, null)
+            return
+        }
+
+        setSaleMagicItemId(entity, snapshot.magicItemId)
+        setSaleItemAmount(entity, snapshot.itemAmount)
+        setCurrency(entity, snapshot.currency)
+        setPrice(entity, snapshot.price)
+        setOriginalSaleScale(entity, snapshot.originalScale)
+    }
+
+    private fun getOriginalSaleScale(entity: PersistentDataHolder): Vector3f? {
+        val rawValue = entity.persistentDataContainer.get(saleOriginalScaleKey, PersistentDataType.STRING) ?: return null
+        val parts = rawValue.split(',')
+        if (parts.size != 3) return null
+        val x = parts[0].toFloatOrNull() ?: return null
+        val y = parts[1].toFloatOrNull() ?: return null
+        val z = parts[2].toFloatOrNull() ?: return null
+        return Vector3f(x, y, z)
+    }
+
+    private fun setOriginalSaleScale(entity: PersistentDataHolder, scale: Vector3f?) {
+        val data = entity.persistentDataContainer
+        if (scale == null) {
+            data.remove(saleOriginalScaleKey)
+            return
+        }
+        data.set(saleOriginalScaleKey, PersistentDataType.STRING, "${scale.x},${scale.y},${scale.z}")
     }
 
     fun getCreatorName(entity: PersistentDataHolder): String? {
@@ -184,8 +231,9 @@ internal class PersistenceService(plugin: Plugin) {
         setGroundItemState(entity, GroundItemState.NORMAL)
         setCurrency(entity, null)
         setPrice(entity, null)
-        setPaymentMagicItemId(entity, null)
-        setPaymentItemAmount(entity, null)
+        setSaleMagicItemId(entity, null)
+        setSaleItemAmount(entity, null)
+        setOriginalSaleScale(entity, null)
         setPartnerUuid(entity, null)
     }
 

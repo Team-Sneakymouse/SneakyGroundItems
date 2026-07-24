@@ -4,6 +4,7 @@ internal enum class GroundItemState(val id: String) {
     NORMAL("normal"),
     SALE("sale"),
     PAYMENT("payment"),
+    STOLEN("stolen"),
     ;
 
     val isLockedLike: Boolean

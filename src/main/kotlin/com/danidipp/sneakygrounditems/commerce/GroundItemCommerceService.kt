@@ -17,6 +17,7 @@ import com.danidipp.sneakygrounditems.interaction.GroundItemInventoryService
 import com.danidipp.sneakygrounditems.interaction.GroundItemLookupService
 import com.danidipp.sneakygrounditems.lock.LockService
 import com.danidipp.sneakygrounditems.model.GroundItemCommandResult
+import com.danidipp.sneakygrounditems.model.GroundItemPolicy
 import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
@@ -67,8 +68,11 @@ internal class GroundItemCommerceService(
         }
 
         val state = persistence.getGroundItemState(display)
-        if (state == GroundItemState.PAYMENT) {
-            return GroundItemCommandResult(false, Component.text("Payment items cannot be repriced"))
+        if (!GroundItemPolicy.canSell(state)) {
+            return GroundItemCommandResult(false, Component.text("Only normal and sale ground items can be sold"))
+        }
+        if (state == GroundItemState.NORMAL && metadataService.hasMagicSpellsExpiry(display.itemStack)) {
+            return GroundItemCommandResult(false, Component.text("Ground items with an expiry cannot be sold"))
         }
         if (state == GroundItemState.NORMAL && lockService.getLockMode(display) != LockService.LockMode.NONE) {
             return GroundItemCommandResult(false, Component.text("That ground item is locked"))
@@ -223,8 +227,8 @@ internal class GroundItemCommerceService(
     }
 
     private fun restoreSoldItemForSale(player: Player, paymentDisplay: ItemDisplay, paymentData: CommerceData) {
-        val soldMagicItemId = persistence.getPaymentMagicItemId(paymentDisplay) ?: return
-        val soldAmount = persistence.getPaymentItemAmount(paymentDisplay) ?: return
+        val soldMagicItemId = persistence.getSaleMagicItemId(paymentDisplay) ?: return
+        val soldAmount = persistence.getSaleItemAmount(paymentDisplay) ?: return
         val replacementPlan = buildReplacementPlan(player, soldMagicItemId, soldAmount) ?: return
         val replacementStack = replacementPlan.stack
         val face = persistence.getFace(paymentDisplay) ?: placementService.deriveFace(paymentDisplay)
@@ -323,7 +327,7 @@ internal class GroundItemCommerceService(
             .filterIsInstance<ItemDisplay>()
             .filter(persistence::isGroundItemDisplay)
             .filter { it.world == world }
-            .filter { persistence.getGroundItemState(it) == GroundItemState.SALE }
+            .filter { GroundItemPolicy.occupiesSaleSlot(persistence.getGroundItemState(it)) }
             .filter { plot.contains(BlockVector3.at(it.location.blockX, it.location.blockY, it.location.blockZ)) }
             .count()
 
@@ -418,16 +422,16 @@ internal class GroundItemCommerceService(
         val originalState = persistence.getGroundItemState(display)
         val originalCurrency = persistence.getCurrency(display)
         val originalPrice = persistence.getPrice(display)
-        val originalPaymentMagicItemId = persistence.getPaymentMagicItemId(display)
-        val originalPaymentItemAmount = persistence.getPaymentItemAmount(display)
+        val originalPaymentMagicItemId = persistence.getSaleMagicItemId(display)
+        val originalPaymentItemAmount = persistence.getSaleItemAmount(display)
 
         display.setItemStack(createPaymentStack(saleData.currency))
         display.transformation = placementService.rescaleTransformation(display.transformation, PAYMENT_ITEM_SCALE)
         persistence.setGroundItemState(display, GroundItemState.PAYMENT)
         persistence.setCurrency(display, saleData.currency)
         persistence.setPrice(display, saleData.price)
-        persistence.setPaymentMagicItemId(display, metadataService.getMagicItemId(originalStack))
-        persistence.setPaymentItemAmount(display, originalStack.amount)
+        persistence.setSaleMagicItemId(display, metadataService.getMagicItemId(originalStack))
+        persistence.setSaleItemAmount(display, originalStack.amount)
         displayService.ensureDisplayFace(display)
         if (displayService.syncCompanionText(display)) {
             return true
@@ -438,8 +442,8 @@ internal class GroundItemCommerceService(
         persistence.setGroundItemState(display, originalState)
         persistence.setCurrency(display, originalCurrency)
         persistence.setPrice(display, originalPrice)
-        persistence.setPaymentMagicItemId(display, originalPaymentMagicItemId)
-        persistence.setPaymentItemAmount(display, originalPaymentItemAmount)
+        persistence.setSaleMagicItemId(display, originalPaymentMagicItemId)
+        persistence.setSaleItemAmount(display, originalPaymentItemAmount)
         displayService.ensureDisplayFace(display)
         displayService.syncCompanionText(display)
         return false
@@ -523,8 +527,8 @@ internal class GroundItemCommerceService(
     }
 
     private fun buildRedeemPaymentMessage(display: ItemDisplay, paymentData: CommerceData): Component {
-        val soldMagicItemId = persistence.getPaymentMagicItemId(display)
-        val soldAmount = persistence.getPaymentItemAmount(display)
+        val soldMagicItemId = persistence.getSaleMagicItemId(display)
+        val soldAmount = persistence.getSaleItemAmount(display)
         val message = Component.text("You gained ", NamedTextColor.YELLOW)
             .append(Component.text("${paymentData.price} ${paymentData.currency}", NamedTextColor.GOLD))
 
