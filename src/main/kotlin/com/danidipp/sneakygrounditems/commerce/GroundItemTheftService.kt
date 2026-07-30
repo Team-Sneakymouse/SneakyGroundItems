@@ -13,6 +13,8 @@ import com.danidipp.sneakygrounditems.model.SaleSnapshot
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
 import com.nisovin.magicspells.util.magicitems.MagicItems
+import io.papermc.paper.datacomponent.DataComponentTypes
+import io.papermc.paper.datacomponent.item.CustomModelData
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -38,7 +40,7 @@ internal class GroundItemTheftService(
         stolenGoods.amount = 1
 
         val display = lookupService.findLookedAtGroundItem(player)
-            ?: return failure("You are not looking at a ground item")
+            ?: return failure(null)
         val stack = display.itemStack
         val magicItemId = metadataService.getMagicItemId(stack)
         val originalMagicItemResolves = magicItemId != null && createMagicItemStack(magicItemId) != null
@@ -80,7 +82,7 @@ internal class GroundItemTheftService(
                 Bukkit.getConsoleSender(),
                 MagicSpellsCommands.shopliftCost(player.name),
             )
-            return GroundItemCommandResult(true, Component.text("You stole the sale item"))
+            return GroundItemCommandResult(true, null)
         } finally {
             runtimeState.finishDisplayResolution(displayUuid)
         }
@@ -125,7 +127,9 @@ internal class GroundItemTheftService(
         val originalStack = display.itemStack.clone()
         val originalTransformation = copyTransformation(display.transformation)
 
-        display.setItemStack(ItemStack(Material.PAPER))
+        display.setItemStack(ItemStack(Material.RABBIT_FOOT).apply {
+            setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(STOLEN_ITEM_NOTICE_MODEL_DATA))
+        })
         display.transformation = placementService.rescaleTransformation(display.transformation, STOLEN_ITEM_SCALE)
         persistence.setSaleSnapshot(display, snapshot)
         persistence.setGroundItemState(display, GroundItemState.STOLEN)
@@ -181,12 +185,14 @@ internal class GroundItemTheftService(
         )
     }
 
-    private fun failure(message: String): GroundItemCommandResult {
-        return GroundItemCommandResult(false, Component.text(message))
+    private fun failure(message: String?): GroundItemCommandResult {
+        val component = if (message != null) Component.text(message) else null
+        return GroundItemCommandResult(false, component)
     }
 
     private companion object {
         const val STOLEN_GOODS_MAGIC_ITEM_ID = "item-stolengoods"
         const val STOLEN_ITEM_SCALE = 0.5f
+        const val STOLEN_ITEM_NOTICE_MODEL_DATA = 247f
     }
 }
