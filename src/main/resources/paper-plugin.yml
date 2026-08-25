@@ -1,7 +1,7 @@
 name: SneakyGroundItems
 version: "1.0"
 main: com.danidipp.sneakygrounditems.SneakyGroundItems
-api-version: "1.21"
+api-version: "26.2"
 authors:
   - DaniDipp
 description: "Dedicated Paper plugin for custom placed ground items"

@@ -3,6 +3,7 @@ package com.danidipp.sneakygrounditems.commerce
 import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.CustomModelData
 import io.papermc.paper.datacomponent.item.ItemLore
+import io.papermc.paper.datacomponent.item.TooltipDisplay
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.NamedTextColor
 import net.kyori.adventure.text.format.TextDecoration
@@ -474,7 +475,7 @@ internal class GroundItemCommerceService(
     private fun createBackground(): ItemStack {
         return ItemStack(Material.JIGSAW).apply {
             setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(3013f))
-            setData(DataComponentTypes.HIDE_TOOLTIP)
+            setData(DataComponentTypes.TOOLTIP_DISPLAY, TooltipDisplay.tooltipDisplay().hideTooltip(true))
         }
     }
 

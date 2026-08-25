@@ -16,6 +16,7 @@ internal fun testPlugin(name: String = "SneakyGroundItemsTest"): Plugin {
     val handler = java.lang.reflect.InvocationHandler { proxy, method, args ->
         when (method.name) {
             "getName" -> name
+            "namespace" -> name.lowercase()
             "hashCode" -> System.identityHashCode(proxy)
             "equals" -> proxy === args?.firstOrNull()
             "toString" -> "TestPlugin($name)"
@@ -66,6 +67,8 @@ internal class FakePersistentDataContainer : PersistentDataContainer {
     override fun getKeys(): MutableSet<NamespacedKey> = values.keys.toMutableSet()
 
     override fun isEmpty(): Boolean = values.isEmpty()
+
+    override fun getSize(): Int = values.size
 
     override fun copyTo(other: PersistentDataContainer, replace: Boolean) {
         for ((key, value) in values) {
