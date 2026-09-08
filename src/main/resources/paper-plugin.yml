@@ -16,6 +16,7 @@ dependencies:
     CoreProtect:
       load: BEFORE
       required: false
+      join-classpath: true
     SneakyBagOfHolding:
       load: BEFORE
       required: false
