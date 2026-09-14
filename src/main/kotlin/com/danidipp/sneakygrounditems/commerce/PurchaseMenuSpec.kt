@@ -8,5 +8,5 @@ internal object PurchaseMenuSpec {
     const val purchaseSlot = 3
     const val previewSlot = 4
     const val noSlot = 5
-    const val backgroundSlot = 8
+    const val backgroundSlot = 0
 }
