@@ -5,6 +5,10 @@ api-version: "26.2"
 authors:
   - DaniDipp
 description: "Dedicated Paper plugin for custom placed ground items"
+permissions:
+  sneakygrounditems.use:
+    description: "Allows placing and interacting with ground items"
+    default: false
 dependencies:
   server:
     MagicSpells:

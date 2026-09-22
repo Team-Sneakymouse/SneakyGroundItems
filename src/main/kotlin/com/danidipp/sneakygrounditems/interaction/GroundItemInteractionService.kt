@@ -48,6 +48,7 @@ internal class GroundItemInteractionService(
 ) {
     fun handlePlayerDropItem(event: PlayerDropItemEvent) {
         if (event.isCancelled) return
+        if (!event.player.hasPermission(USE_PERMISSION)) return
         if (isMagicSpellsDropEvent()) return
 
         val droppedStack = event.itemDrop.itemStack.clone()
@@ -112,6 +113,7 @@ internal class GroundItemInteractionService(
 
         val player = event.player
         val display = lookupService.findInteractedGroundItem(event) ?: return
+        if (!player.hasPermission(USE_PERMISSION)) return
 
         event.setUseInteractedBlock(Result.DENY)
         event.setUseItemInHand(Result.DENY)
@@ -126,6 +128,7 @@ internal class GroundItemInteractionService(
     }
 
     fun handlePlayerPickItem(event: PlayerPickItemEvent) {
+        if (!event.player.hasPermission(USE_PERMISSION)) return
         if (event.player.gameMode != GameMode.CREATIVE) return
 
         val display = lookupService.findLookedAtGroundItem(event.player) ?: return
@@ -257,5 +260,9 @@ internal class GroundItemInteractionService(
             type == Material.WATER ||
             type == Material.LAVA ||
             type.name.endsWith("CAULDRON")
+    }
+
+    companion object {
+        private const val USE_PERMISSION = "sneakygrounditems.use"
     }
 }
