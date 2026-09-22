@@ -198,7 +198,7 @@ internal class Command(
         val sender = context.source.sender
         val targetedPlayer = resolveTargetPlayer(sender, targetName) ?: return 0
         val display = lookupService.findLookedAtGroundItem(targetedPlayer)
-            ?: return fail(context, "Target player is not looking at a ground item")
+            ?: return fail(context, "Not looking at a ground item")
 
         if (lock) {
             if (persistence.getGroundItemState(display).isLockedLike || lockService.getLockMode(display) != LockService.LockMode.NONE) {
