@@ -30,13 +30,13 @@ repositories {
     maven {
         url = uri("https://maven.enginehub.org/repo/")
     }
+    maven {
+        name = "playpro-repo"
+        url = uri("https://maven.playpro.com")
+    }
     mavenCentral()
     maven("https://maven.sneakyrp.com/releases")
 }
-
-val coreProtectJar =
-    file("libs/CoreProtect-23.3.jar").takeIf { it.exists() }
-        ?: error("CoreProtect jar not found. Put CoreProtect-23.3.jar in libs/.")
 
 dependencies {
     implementation(kotlin("stdlib"))
@@ -53,7 +53,10 @@ dependencies {
     compileOnly("com.sk89q.worldedit:worldedit-core:7.4.0") {
         isTransitive = false
     }
-    compileOnly(files(coreProtectJar))
+    // 23.3 was vendored; PlayPro Maven publishes through 23.2 / 24.x (listeners used by audit logger present).
+    compileOnly("net.coreprotect:coreprotect:23.2") {
+        isTransitive = false
+    }
     compileOnly("io.github.team-sneakymouse:magicspells-core:2026.10.09-17f579714ffe") {
         isTransitive = false
     }
