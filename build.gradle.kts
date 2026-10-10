@@ -31,19 +31,12 @@ repositories {
         url = uri("https://maven.enginehub.org/repo/")
     }
     mavenCentral()
+    maven("https://maven.sneakyrp.com/releases")
 }
 
 val coreProtectJar =
     file("libs/CoreProtect-23.3.jar").takeIf { it.exists() }
         ?: error("CoreProtect jar not found. Put CoreProtect-23.3.jar in libs/.")
-
-val magicSpellsJar =
-    file("libs/MagicSpells.jar").takeIf { it.exists() }
-        ?: error("MagicSpells jar not found. Put MagicSpells.jar in libs/.")
-
-val sneakyBagOfHoldingJar =
-    file("libs/SneakyBagOfHolding.jar").takeIf { it.exists() }
-        ?: error("SneakyBagOfHolding jar not found. Put SneakyBagOfHolding.jar in libs/.")
 
 dependencies {
     implementation(kotlin("stdlib"))
@@ -61,8 +54,12 @@ dependencies {
         isTransitive = false
     }
     compileOnly(files(coreProtectJar))
-    compileOnly(files(magicSpellsJar))
-    compileOnly(files(sneakyBagOfHoldingJar))
+    compileOnly("io.github.team-sneakymouse:magicspells-core:2026.10.09-17f579714ffe") {
+        isTransitive = false
+    }
+    compileOnly("io.github.team-sneakymouse:sneakybagofholding:2026.10.09-a79a55f6d44b") {
+        isTransitive = false
+    }
 
     testImplementation(kotlin("test"))
     testImplementation("io.papermc.paper:paper-api:26.2.build.117-stable")

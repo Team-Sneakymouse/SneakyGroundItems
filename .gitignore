@@ -13,8 +13,7 @@
 # Package Files #
 *.jar
 !gradle-wrapper.jar
-!libs/
-!libs/*.jar
+!libs/CoreProtect-23.3.jar
 *.war
 *.nar
 *.ear
