@@ -1,5 +1,5 @@
 name: SneakyGroundItems
-version: "1.0"
+version: "${version}"
 main: com.danidipp.sneakygrounditems.SneakyGroundItems
 api-version: "26.2"
 authors:

@@ -1,6 +1,26 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+
 plugins {
     kotlin("jvm") version "2.4.10"
+    `maven-publish`
 }
+
+group = "io.github.team-sneakymouse"
+
+version =
+    providers.exec {
+        workingDir(rootDir)
+        commandLine("git", "show", "-s", "--format=%ct:%h", "--abbrev=12", "HEAD")
+    }.standardOutput.asText.map { commit ->
+        val (timestamp, hash) = commit.trim().split(":", limit = 2)
+        val date =
+            DateTimeFormatter.ofPattern("yyyy.MM.dd").withZone(ZoneOffset.UTC)
+                .format(Instant.ofEpochSecond(timestamp.toLong()))
+        "$date-$hash"
+    }.get()
 
 repositories {
     maven {
@@ -13,23 +33,17 @@ repositories {
     mavenCentral()
 }
 
-val coreProtectJar = sequenceOf(
-    file("libs/CoreProtect-23.3.jar"),
-    file("C:\\Users\\DaniDipp\\Downloads\\1.21.4\\CoreProtect-23.3.jar"),
-).firstOrNull { it.exists() }
-    ?: error("CoreProtect jar not found. Put CoreProtect-23.3.jar in libs/ or update build.gradle.kts.")
+val coreProtectJar =
+    file("libs/CoreProtect-23.3.jar").takeIf { it.exists() }
+        ?: error("CoreProtect jar not found. Put CoreProtect-23.3.jar in libs/.")
 
-val magicSpellsJar = sequenceOf(
-    file("libs/MagicSpells.jar"),
-    file("D:\\Projects\\MagicSpells\\core\\build\\libs\\MagicSpells.jar"),
-).firstOrNull { it.exists() }
-    ?: error("MagicSpells jar not found. Put MagicSpells.jar in libs/ or update build.gradle.kts.")
+val magicSpellsJar =
+    file("libs/MagicSpells.jar").takeIf { it.exists() }
+        ?: error("MagicSpells jar not found. Put MagicSpells.jar in libs/.")
 
-val sneakyBagOfHoldingJar = sequenceOf(
-    file("libs/SneakyBagOfHolding.jar"),
-    file("D:\\Projects\\SneakyBagOfHolding\\build\\libs\\SneakyBagOfHolding.jar"),
-).firstOrNull { it.exists() }
-    ?: error("SneakyBagOfHolding jar not found. Put SneakyBagOfHolding.jar in libs/ or update build.gradle.kts.")
+val sneakyBagOfHoldingJar =
+    file("libs/SneakyBagOfHolding.jar").takeIf { it.exists() }
+        ?: error("SneakyBagOfHolding jar not found. Put SneakyBagOfHolding.jar in libs/.")
 
 dependencies {
     implementation(kotlin("stdlib"))
@@ -54,17 +68,70 @@ dependencies {
     testImplementation("io.papermc.paper:paper-api:26.2.build.117-stable")
 }
 
-tasks.jar {
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from(configurations.runtimeClasspath.get().map { dependency ->
-        if (dependency.isDirectory) dependency else zipTree(dependency)
-    })
-}
-
-tasks.test {
-    useJUnitPlatform()
-}
-
 kotlin {
     jvmToolchain(25)
+}
+
+java {
+    withSourcesJar()
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_25)
+    }
+}
+
+tasks {
+    processResources {
+        inputs.property("version", project.version.toString())
+        filesMatching("paper-plugin.yml") {
+            expand("version" to project.version.toString())
+        }
+    }
+
+    jar {
+        archiveBaseName.set(rootProject.name)
+        archiveFileName.set("${rootProject.name}-${project.version}.jar")
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        from(configurations.runtimeClasspath.get().map { dependency ->
+            if (dependency.isDirectory) dependency else zipTree(dependency)
+        })
+    }
+
+    test {
+        useJUnitPlatform()
+    }
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = "sneakygrounditems"
+            from(components["java"])
+            pom {
+                name.set("SneakyGroundItems")
+                description.set("Dedicated Paper plugin for custom placed ground items.")
+                url.set("https://github.com/Team-Sneakymouse/SneakyGroundItems")
+                scm {
+                    url.set("https://github.com/Team-Sneakymouse/SneakyGroundItems")
+                    connection.set("scm:git:https://github.com/Team-Sneakymouse/SneakyGroundItems.git")
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "sneakyrp"
+            url = uri("https://maven.sneakyrp.com/releases")
+            credentials(PasswordCredentials::class)
+            authentication {
+                create<org.gradle.authentication.http.BasicAuthentication>("basic")
+            }
+        }
+    }
+}
+
+tasks.withType<PublishToMavenRepository>().configureEach {
+    dependsOn(tasks.check)
 }
