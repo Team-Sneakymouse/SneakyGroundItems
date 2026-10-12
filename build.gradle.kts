@@ -113,6 +113,7 @@ publishing {
                 name.set("SneakyGroundItems")
                 description.set("Dedicated Paper plugin for custom placed ground items.")
                 url.set("https://github.com/Team-Sneakymouse/SneakyGroundItems")
+                properties.put("sneakyrp.deployment.type", "paper-plugin")
                 scm {
                     url.set("https://github.com/Team-Sneakymouse/SneakyGroundItems")
                     connection.set("scm:git:https://github.com/Team-Sneakymouse/SneakyGroundItems.git")
