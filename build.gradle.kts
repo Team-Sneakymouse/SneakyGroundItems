@@ -57,7 +57,7 @@ dependencies {
     compileOnly("net.coreprotect:coreprotect:23.2") {
         isTransitive = false
     }
-    compileOnly("io.github.team-sneakymouse:magicspells-core:2026.10.09-17f579714ffe") {
+    compileOnly("io.github.team-sneakymouse:magicspells:2026.10.15-f0a44ae377a3") {
         isTransitive = false
     }
     compileOnly("io.github.team-sneakymouse:sneakybagofholding:2026.10.09-a79a55f6d44b") {
