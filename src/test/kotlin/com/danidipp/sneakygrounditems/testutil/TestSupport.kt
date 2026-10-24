@@ -17,6 +17,7 @@ internal fun testPlugin(name: String = "SneakyGroundItemsTest"): Plugin {
         when (method.name) {
             "getName" -> name
             "namespace" -> name.lowercase()
+            "getLogger" -> java.util.logging.Logger.getLogger(name)
             "hashCode" -> System.identityHashCode(proxy)
             "equals" -> proxy === args?.firstOrNull()
             "toString" -> "TestPlugin($name)"

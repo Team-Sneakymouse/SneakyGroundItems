@@ -5,6 +5,7 @@ import java.time.format.DateTimeFormatter
 
 plugins {
     kotlin("jvm") version "2.4.10"
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.24"
     `maven-publish`
 }
 
@@ -40,7 +41,7 @@ repositories {
 
 dependencies {
     implementation(kotlin("stdlib"))
-    compileOnly("io.papermc.paper:paper-api:26.2.build.117-stable")
+    paperweight.paperDevBundle("26.2.build.117-stable")
     compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.18") {
         isTransitive = false
     }
@@ -65,7 +66,12 @@ dependencies {
     }
 
     testImplementation(kotlin("test"))
+    testImplementation("org.mockito:mockito-core:5.23.0")
     testImplementation("io.papermc.paper:paper-api:26.2.build.117-stable")
+}
+
+configurations.testCompileOnly {
+    extendsFrom(configurations.compileOnly.get())
 }
 
 kotlin {
@@ -101,6 +107,10 @@ tasks {
 
     test {
         useJUnitPlatform()
+        workingDir = layout.buildDirectory.dir("test-runtime").get().asFile
+        doFirst { workingDir.mkdirs() }
+        // Packet adapter tests exercise the actual pinned Paper classes without bundling them.
+        classpath += sourceSets.main.get().compileClasspath
     }
 }
 

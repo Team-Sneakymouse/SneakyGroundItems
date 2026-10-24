@@ -71,9 +71,7 @@ internal class GroundItemTheftService(
                 price = price,
                 originalScale = Vector3f(display.transformation.scale),
             )
-            if (!convertToStolen(display, snapshot)) {
-                return failure("Failed to create the stolen item display")
-            }
+            convertToStolen(display, snapshot)
 
             for (overflow in player.inventory.addItem(stolenGoods).values) {
                 player.world.dropItemNaturally(player.location, overflow)
@@ -108,11 +106,7 @@ internal class GroundItemTheftService(
             }
             restoredStack.amount = snapshot.itemAmount
 
-            if (!restoreSaleDisplay(display, restoredStack, snapshot)) {
-                player.sendMessage("This stolen item could not be restored")
-                plugin.logger.warning("Could not restore stolen ground item $displayUuid: failed to create sale text")
-                return
-            }
+            restoreSaleDisplay(display, restoredStack, snapshot)
 
             val command = MagicSpellsCommands.shopliftingNotice(player.name)
             if (!Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command)) {
@@ -123,10 +117,7 @@ internal class GroundItemTheftService(
         }
     }
 
-    private fun convertToStolen(display: ItemDisplay, snapshot: SaleSnapshot): Boolean {
-        val originalStack = display.itemStack.clone()
-        val originalTransformation = copyTransformation(display.transformation)
-
+    private fun convertToStolen(display: ItemDisplay, snapshot: SaleSnapshot) {
         display.setItemStack(ItemStack(Material.RABBIT_FOOT).apply {
             setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(STOLEN_ITEM_NOTICE_MODEL_DATA))
         })
@@ -134,26 +125,13 @@ internal class GroundItemTheftService(
         persistence.setSaleSnapshot(display, snapshot)
         persistence.setGroundItemState(display, GroundItemState.STOLEN)
         displayService.ensureDisplayFace(display)
-        if (displayService.syncCompanionText(display)) return true
-
-        display.setItemStack(originalStack)
-        display.transformation = originalTransformation
-        persistence.setGroundItemState(display, GroundItemState.SALE)
-        persistence.setSaleSnapshot(display, null)
-        persistence.setCurrency(display, snapshot.currency)
-        persistence.setPrice(display, snapshot.price)
-        displayService.syncCompanionText(display)
-        return false
     }
 
     private fun restoreSaleDisplay(
         display: ItemDisplay,
         restoredStack: ItemStack,
         snapshot: SaleSnapshot,
-    ): Boolean {
-        val stolenStack = display.itemStack.clone()
-        val stolenTransformation = copyTransformation(display.transformation)
-
+    ) {
         display.setItemStack(restoredStack)
         display.transformation = copyTransformation(display.transformation).apply {
             scale.set(snapshot.originalScale)
@@ -162,14 +140,6 @@ internal class GroundItemTheftService(
         persistence.setSaleSnapshot(display, null)
         persistence.setCurrency(display, snapshot.currency)
         persistence.setPrice(display, snapshot.price)
-        if (displayService.syncCompanionText(display)) return true
-
-        display.setItemStack(stolenStack)
-        display.transformation = stolenTransformation
-        persistence.setSaleSnapshot(display, snapshot)
-        persistence.setGroundItemState(display, GroundItemState.STOLEN)
-        displayService.syncCompanionText(display)
-        return false
     }
 
     private fun createMagicItemStack(magicItemId: String): ItemStack? {

@@ -32,9 +32,6 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.Damageable
 import org.bukkit.plugin.Plugin
-import org.bukkit.util.Transformation
-import org.joml.Quaternionf
-import org.joml.Vector3f
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.UUID
@@ -52,6 +49,7 @@ internal class GroundItemCommerceService(
     private val inventoryService: GroundItemInventoryService,
     private val effectsService: GroundItemEffectsService,
     private val auditService: GroundItemAuditService,
+    private val paymentItem: (Currency) -> ItemStack = ::createPaymentStack,
 ) {
     fun sellGroundItem(player: Player, price: Int, currency: Currency): GroundItemCommandResult {
         if (price > Command.MAX_SELL_PRICE) {
@@ -64,7 +62,7 @@ internal class GroundItemCommerceService(
 
         val display = lookupService.findLookedAtGroundItem(player) ?: return GroundItemCommandResult(false, null)
         if (metadataService.hasExpiredMagicSpellsLifetime(display.itemStack)) {
-            displayService.removeDisplayAndCompanion(display)
+            displayService.removeDisplay(display)
             return GroundItemCommandResult(false, Component.text("That ground item has expired"))
         }
 
@@ -94,9 +92,7 @@ internal class GroundItemCommerceService(
             }
         }
 
-        if (!markGroundItemForSale(display, price, currency)) {
-            return GroundItemCommandResult(false, Component.text("Failed to create the sale display text"))
-        }
+        markGroundItemForSale(display, price, currency)
 
         effectsService.playNearbySound(player.location, "lom:sfx.pricegun")
 
@@ -109,18 +105,11 @@ internal class GroundItemCommerceService(
         return GroundItemCommandResult(true, message)
     }
 
-    fun markGroundItemForSale(display: ItemDisplay, price: Int, currency: Currency): Boolean {
+    fun markGroundItemForSale(display: ItemDisplay, price: Int, currency: Currency) {
         persistence.setGroundItemState(display, GroundItemState.SALE)
         persistence.setCurrency(display, currency)
         persistence.setPrice(display, price)
-        displayService.ensureDisplayFace(display)
-
-        if (displayService.syncCompanionText(display)) {
-            return true
-        }
-
-        displayService.normalizeDisplay(display)
-        return false
+        displayService.prepareSaleDisplay(display)
     }
 
     fun openPurchaseMenu(player: Player, display: ItemDisplay) {
@@ -189,12 +178,7 @@ internal class GroundItemCommerceService(
             }
 
             player.closeInventory()
-            if (!completeSalePickup(player, display, saleData, createPayment = true)) {
-                bankService.deposit(player, saleData.currency, saleData.price)
-                effectsService.playUiSound(player, "lom:failwrong")
-                player.sendMessage("Purchase failed because the payment item could not be created")
-                return
-            }
+            completeSalePickup(player, display, saleData, createPayment = true)
             effectsService.playUiSound(player, "lom:buy")
         } finally {
             runtimeState.finishDisplayResolution(displayUuid)
@@ -219,7 +203,7 @@ internal class GroundItemCommerceService(
             if (plotSaleItemLimitFailure(display) == null) {
                 restoreSoldItemForSale(player, display, paymentData)
             }
-            displayService.removeDisplayAndCompanion(display)
+            displayService.removeDisplay(display)
             effectsService.playUiSound(player, "lom:buy")
             player.sendMessage(buildRedeemPaymentMessage(display, paymentData))
         } finally {
@@ -387,16 +371,14 @@ internal class GroundItemCommerceService(
         }
     }
 
-    private fun completeSalePickup(player: Player, display: ItemDisplay, saleData: CommerceData, createPayment: Boolean): Boolean {
+    private fun completeSalePickup(player: Player, display: ItemDisplay, saleData: CommerceData, createPayment: Boolean) {
         val stack = display.itemStack.clone()
         val pickupLocation = display.location.clone()
 
         if (createPayment) {
-            if (!convertDisplayToPayment(display, saleData)) {
-                return false
-            }
+            convertDisplayToPayment(display, saleData)
         } else {
-            displayService.removeDisplayAndCompanion(display)
+            displayService.removeDisplay(display)
         }
 
         val overflow = inventoryService.giveCollectedItem(player, stack)
@@ -414,19 +396,12 @@ internal class GroundItemCommerceService(
                     .append(Component.text("${saleData.price} ${saleData.currency}", NamedTextColor.GOLD)),
             )
         }
-        return true
     }
 
-    private fun convertDisplayToPayment(display: ItemDisplay, saleData: CommerceData): Boolean {
+    private fun convertDisplayToPayment(display: ItemDisplay, saleData: CommerceData) {
         val originalStack = display.itemStack.clone()
-        val originalTransformation = copyTransformation(display.transformation)
-        val originalState = persistence.getGroundItemState(display)
-        val originalCurrency = persistence.getCurrency(display)
-        val originalPrice = persistence.getPrice(display)
-        val originalPaymentMagicItemId = persistence.getSaleMagicItemId(display)
-        val originalPaymentItemAmount = persistence.getSaleItemAmount(display)
 
-        display.setItemStack(createPaymentStack(saleData.currency))
+        display.setItemStack(paymentItem(saleData.currency))
         display.transformation = placementService.rescaleTransformation(display.transformation, PAYMENT_ITEM_SCALE)
         persistence.setGroundItemState(display, GroundItemState.PAYMENT)
         persistence.setCurrency(display, saleData.currency)
@@ -434,20 +409,6 @@ internal class GroundItemCommerceService(
         persistence.setSaleMagicItemId(display, metadataService.getMagicItemId(originalStack))
         persistence.setSaleItemAmount(display, originalStack.amount)
         displayService.ensureDisplayFace(display)
-        if (displayService.syncCompanionText(display)) {
-            return true
-        }
-
-        display.setItemStack(originalStack)
-        display.transformation = originalTransformation
-        persistence.setGroundItemState(display, originalState)
-        persistence.setCurrency(display, originalCurrency)
-        persistence.setPrice(display, originalPrice)
-        persistence.setSaleMagicItemId(display, originalPaymentMagicItemId)
-        persistence.setSaleItemAmount(display, originalPaymentItemAmount)
-        displayService.ensureDisplayFace(display)
-        displayService.syncCompanionText(display)
-        return false
     }
 
     private fun createPurchaseButton(stack: ItemStack, saleData: CommerceData): ItemStack {
@@ -476,12 +437,6 @@ internal class GroundItemCommerceService(
         return ItemStack(Material.JIGSAW).apply {
             setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(3013f))
             setData(DataComponentTypes.TOOLTIP_DISPLAY, TooltipDisplay.tooltipDisplay().hideTooltip(true))
-        }
-    }
-
-    private fun createPaymentStack(currency: Currency): ItemStack {
-        return ItemStack(Material.RABBIT_FOOT).apply {
-            setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(currency.customModelData.toFloat()))
         }
     }
 
@@ -550,15 +505,6 @@ internal class GroundItemCommerceService(
             .append(soldMagicItem.itemStack.displayName())
     }
 
-    private fun copyTransformation(transformation: Transformation): Transformation {
-        return Transformation(
-            Vector3f(transformation.translation),
-            Quaternionf(transformation.leftRotation),
-            Vector3f(transformation.scale),
-            Quaternionf(transformation.rightRotation),
-        )
-    }
-
     private data class CommerceData(
         val state: GroundItemState,
         val currency: Currency,
@@ -575,5 +521,9 @@ internal class GroundItemCommerceService(
     companion object {
         private const val PAYMENT_ITEM_SCALE = 0.5f
         private const val BANK_EPSILON = 1.0e-6
+
+        private fun createPaymentStack(currency: Currency) = ItemStack(Material.RABBIT_FOOT).apply {
+            setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(currency.customModelData.toFloat()))
+        }
     }
 }

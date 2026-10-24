@@ -226,7 +226,7 @@ internal class GroundItemInteractionService(
 
                 val stack = resolvedDisplay.itemStack.clone()
                 val pickupLocation = resolvedDisplay.location.clone()
-                displayService.removeDisplayAndCompanion(resolvedDisplay)
+                displayService.removeDisplay(resolvedDisplay)
 
                 val onlinePlayer = Bukkit.getPlayer(playerUuid)
                 if (onlinePlayer == null || !onlinePlayer.isOnline) {

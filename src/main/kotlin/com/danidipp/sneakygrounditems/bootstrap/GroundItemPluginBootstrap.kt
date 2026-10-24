@@ -2,6 +2,7 @@ package com.danidipp.sneakygrounditems.bootstrap
 
 import com.danidipp.sneakygrounditems.SneakyGroundItems
 import com.danidipp.sneakygrounditems.command.Command
+import com.danidipp.sneakygrounditems.display.labels.GroundItemLabels
 import com.danidipp.sneakygrounditems.interaction.GroundItemChunkListener
 import com.danidipp.sneakygrounditems.interaction.GroundItemInteractionListener
 import com.danidipp.sneakygrounditems.interaction.GroundItemInventoryListener
@@ -11,7 +12,7 @@ import org.bukkit.Bukkit
 internal class GroundItemPluginBootstrap(
     private val plugin: SneakyGroundItems,
 ) {
-    fun enable() {
+    fun enable(): AutoCloseable {
         val context = GroundItemPluginContext.create(plugin)
 
         context.displayService.processLoadedChunks()
@@ -34,5 +35,8 @@ internal class GroundItemPluginBootstrap(
         Bukkit.getPluginManager().registerEvents(GroundItemInteractionListener(context.interactionService), plugin)
         Bukkit.getPluginManager().registerEvents(GroundItemInventoryListener(context.commerceService), plugin)
         Bukkit.getPluginManager().registerEvents(GroundItemChunkListener(context.displayService), plugin)
+        val labels = GroundItemLabels.create(plugin, context.persistence, context.placementService)
+        labels.start()
+        return labels
     }
 }
