@@ -30,7 +30,8 @@ internal class LockService(
 
     private val lockZone = ZoneId.of("UTC-07:00")
 
-    fun lockTarget(actor: CommandSender, display: ItemDisplay): LockMode {
+    fun lockTarget(actor: CommandSender, display: ItemDisplay, showoff: Boolean = false): LockMode {
+        persistence.setShowoff(display, showoff)
         return when (determineLockMode(actor, display.location)) {
             LockMode.PERMANENT -> {
                 persistence.setPermanentLock(display)
@@ -53,6 +54,15 @@ internal class LockService(
         return persistence.getLockMode(display)
     }
 
+    fun isShowoff(display: ItemDisplay): Boolean {
+        return persistence.isShowoff(display)
+    }
+
+    /** Turns an existing lock into a showoff lock without changing its mode. */
+    fun showOff(display: ItemDisplay) {
+        persistence.setShowoff(display, true)
+    }
+
     fun canUnlock(actor: CommandSender, display: ItemDisplay): Boolean {
         if (actor.hasPermission(Command.ADMIN_PERMISSION)) return true
 
@@ -69,6 +79,7 @@ internal class LockService(
         if (temporaryDate == todayLockDate()) return
 
         persistence.clearTemporaryLock(display)
+        persistence.setShowoff(display, false)
     }
 
     fun clearInvalidPlotLock(display: ItemDisplay) {
@@ -78,13 +89,22 @@ internal class LockService(
         persistence.clearLock(display)
     }
 
-    fun formatBoundMessage(stack: ItemStack, temporary: Boolean): Component {
-        val suffix = if (temporary) {
-            " is now bound in place for the rest of the day"
-        } else {
-            " is now bound in place"
+    fun formatBoundMessage(stack: ItemStack, temporary: Boolean, showoff: Boolean = false): Component {
+        val suffix = when {
+            showoff && temporary -> " is now on show for the rest of the day"
+            showoff -> " is now on show"
+            temporary -> " is now bound in place for the rest of the day"
+            else -> " is now bound in place"
         }
         return stack.displayName().append(Component.text(suffix))
+    }
+
+    fun formatShowoffMessage(stack: ItemStack): Component {
+        return stack.displayName().append(Component.text(" is now on show"))
+    }
+
+    fun formatAlreadyShowoffMessage(stack: ItemStack): Component {
+        return stack.displayName().append(Component.text(" is already on show"))
     }
 
     fun formatUnboundMessage(stack: ItemStack): Component {

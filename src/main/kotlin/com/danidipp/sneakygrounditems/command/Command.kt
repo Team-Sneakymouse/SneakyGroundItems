@@ -80,6 +80,17 @@ internal class Command(
             .requires { it.sender.hasAnyPermission(LOCK_PERMISSION, ADMIN_PERMISSION) }
             .executes { lockOrUnlock(it, lock = true, targetName = null) }
             .then(
+                Commands.literal("showoff")
+                    .executes { lockOrUnlock(it, lock = true, targetName = null, showoff = true) }
+                    .then(
+                        Commands.argument("playerName", StringArgumentType.word())
+                            .suggests(playerSuggestions)
+                            .executes {
+                                lockOrUnlock(it, lock = true, targetName = StringArgumentType.getString(it, "playerName"), showoff = true)
+                            }
+                    )
+            )
+            .then(
                 Commands.argument("playerName", StringArgumentType.word())
                     .suggests(playerSuggestions)
                     .executes { lockOrUnlock(it, lock = true, targetName = StringArgumentType.getString(it, "playerName")) }
@@ -194,22 +205,39 @@ internal class Command(
                     )
             )
 
-    private fun lockOrUnlock(context: CommandContext<CommandSourceStack>, lock: Boolean, targetName: String?): Int {
+    private fun lockOrUnlock(
+        context: CommandContext<CommandSourceStack>,
+        lock: Boolean,
+        targetName: String?,
+        showoff: Boolean = false,
+    ): Int {
         val sender = context.source.sender
         val targetedPlayer = resolveTargetPlayer(sender, targetName) ?: return 0
         val display = lookupService.findLookedAtGroundItem(targetedPlayer)
             ?: return fail(context, "Not looking at a ground item")
 
         if (lock) {
-            if (persistence.getGroundItemState(display).isLockedLike || lockService.getLockMode(display) != LockService.LockMode.NONE) {
+            if (persistence.getGroundItemState(display).isLockedLike) {
                 sender.sendMessage(lockService.formatAlreadyBoundMessage(display.itemStack))
                 return Command.SINGLE_SUCCESS
             }
-            val lockMode = lockService.lockTarget(sender, display)
+            if (lockService.getLockMode(display) != LockService.LockMode.NONE) {
+                when {
+                    !showoff -> sender.sendMessage(lockService.formatAlreadyBoundMessage(display.itemStack))
+                    lockService.isShowoff(display) -> sender.sendMessage(lockService.formatAlreadyShowoffMessage(display.itemStack))
+                    else -> {
+                        lockService.showOff(display)
+                        sender.sendMessage(lockService.formatShowoffMessage(display.itemStack))
+                    }
+                }
+                return Command.SINGLE_SUCCESS
+            }
+            val lockMode = lockService.lockTarget(sender, display, showoff)
             sender.sendMessage(
                 lockService.formatBoundMessage(
                     display.itemStack,
                     lockMode == LockService.LockMode.TEMPORARY,
+                    showoff,
                 ),
             )
         } else {

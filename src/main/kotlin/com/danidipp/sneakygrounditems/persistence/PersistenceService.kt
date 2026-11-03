@@ -38,6 +38,7 @@ internal class PersistenceService(plugin: Plugin) {
     private val legacyPermanentLockModeKey = legacyKey("ground_item_lock_mode")
     private val temporaryLockDateKey = NamespacedKey(plugin, "ground_item_temporary_lock_date")
     private val legacyTemporaryLockDateKey = legacyKey("ground_item_temporary_lock_date")
+    private val showoffKey = NamespacedKey(plugin, "ground_item_showoff")
 
     fun isGroundItem(entity: Entity): Boolean {
         return hasString(entity, kindKey, legacyKindKey)
@@ -279,6 +280,20 @@ internal class PersistenceService(plugin: Plugin) {
     fun clearLock(display: ItemDisplay) {
         clearPermanentLock(display)
         clearTemporaryLock(display)
+        setShowoff(display, false)
+    }
+
+    /** Showoff rides on top of a lock mode and is cleared with it. */
+    fun isShowoff(entity: PersistentDataHolder): Boolean {
+        return entity.persistentDataContainer.has(showoffKey, PersistentDataType.BYTE)
+    }
+
+    fun setShowoff(entity: PersistentDataHolder, showoff: Boolean) {
+        if (showoff) {
+            entity.persistentDataContainer.set(showoffKey, PersistentDataType.BYTE, 1)
+        } else {
+            entity.persistentDataContainer.remove(showoffKey)
+        }
     }
 
     fun resolveDisplay(uuid: UUID): ItemDisplay? {

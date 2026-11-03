@@ -19,6 +19,13 @@ class GroundItemLabelTest {
         assertNull(GroundItemLabel.derive(GroundItemState.PAYMENT, Component.empty(), 1, Currency.entries.first(), -1, BlockFace.UP))
     }
 
+    @Test fun showoffShowsNameOnNormalItems() {
+        val single = GroundItemLabel.derive(GroundItemState.NORMAL, Component.text("Crown"), 1, null, null, BlockFace.UP, showoff = true)
+        assertEquals(GroundItemLabel(Component.text("Crown"), BlockFace.UP), single)
+        val stack = GroundItemLabel.derive(GroundItemState.NORMAL, Component.text("Bread"), 3, null, null, BlockFace.UP, showoff = true)
+        assertEquals(Component.text("3x ").append(Component.text("Bread")), stack?.text)
+    }
+
     @Test fun saleKeepsQuantityNameAndRoundedEachPrice() {
         val currency = Currency.entries.first()
         val label = GroundItemLabel.derive(GroundItemState.SALE, Component.text("Bread"), 3, currency, 10, BlockFace.NORTH)!!

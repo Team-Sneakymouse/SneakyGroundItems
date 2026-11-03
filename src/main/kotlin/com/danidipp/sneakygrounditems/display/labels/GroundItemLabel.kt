@@ -18,8 +18,13 @@ internal data class GroundItemLabel(val text: Component, val face: BlockFace) {
             currency: Currency?,
             price: Int?,
             face: BlockFace,
+            showoff: Boolean = false,
         ): GroundItemLabel? {
-            if (state == GroundItemState.NORMAL) return null
+            if (state == GroundItemState.NORMAL) {
+                if (!showoff || amount <= 0) return null
+                val text = if (amount > 1) Component.text("${amount}x ").append(name) else name
+                return GroundItemLabel(text, face)
+            }
             if (state == GroundItemState.STOLEN) {
                 return GroundItemLabel(Component.text("Stolen Item", NamedTextColor.DARK_RED), face)
             }

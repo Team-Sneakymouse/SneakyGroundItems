@@ -46,4 +46,22 @@ class LockServiceTest {
 
         assertEquals(LockService.LockMode.PERMANENT, persistence.getLockMode(display))
     }
+
+    @Test
+    fun clearingALockAlsoEndsShowoff() {
+        val display = fakeItemDisplay(
+            Transformation(
+                Vector3f(),
+                Quaternionf(),
+                Vector3f(1f, 1f, 1f),
+                Quaternionf(),
+            ),
+        )
+        persistence.setPlotLock(display)
+        service.showOff(display)
+
+        service.clearInvalidPlotLock(display)
+
+        assertEquals(false, persistence.isShowoff(display))
+    }
 }
