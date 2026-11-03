@@ -9,7 +9,7 @@ A ground item that is currently listed for sale on a plot. Each sale item occupi
 _Avoid_: Sellable item, listed ground item
 
 **Locked ground item**:
-A normal ground item with any lock mode: temporary, permanent, or plot.
+A normal ground item with any lock mode: temporary, permanent, or plot. Any of them can also be a **showoff lock** (`/grounditem lock showoff`), which keeps showing the item's name as a ground-item label; unlocking or lock expiry ends it.
 _Avoid_: Bound item
 
 **Nearby ground item**:

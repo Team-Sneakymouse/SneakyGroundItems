@@ -147,7 +147,8 @@ private class BukkitLabelEnvironment(
             .filter { it.isValid && persistence.isGroundItemDisplay(it) && player.canSee(it) }
             .mapNotNull { item ->
                 val state = persistence.getGroundItemState(item)
-                if (state == GroundItemState.NORMAL) return@mapNotNull null
+                val showoff = state == GroundItemState.NORMAL && persistence.isShowoff(item)
+                if (state == GroundItemState.NORMAL && !showoff) return@mapNotNull null
                 val position = item.location
                 val distance = position.distanceSquared(center)
                 if (distance > radius * radius) return@mapNotNull null
@@ -155,7 +156,7 @@ private class BukkitLabelEnvironment(
                     val stack = item.itemStack
                     labelCache[item.uniqueId] = GroundItemLabel.derive(
                         state, stack.displayName(), stack.amount, persistence.getCurrency(item), persistence.getPrice(item),
-                        persistence.getFace(item) ?: placement.deriveFace(item),
+                        persistence.getFace(item) ?: placement.deriveFace(item), showoff,
                     )
                 }
                 val label = labelCache[item.uniqueId]
