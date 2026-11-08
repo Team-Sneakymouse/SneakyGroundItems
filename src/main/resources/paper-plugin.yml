@@ -11,6 +11,10 @@ permissions:
     default: false
 dependencies:
   server:
+    SneakyItems:
+      load: BEFORE
+      required: true
+      join-classpath: true
     MagicSpells:
       load: BEFORE
       required: true

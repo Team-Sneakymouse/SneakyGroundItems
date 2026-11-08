@@ -12,8 +12,7 @@ import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
 import com.danidipp.sneakygrounditems.testutil.FakePersistentDataContainer
 import com.danidipp.sneakygrounditems.testutil.testPlugin
-import com.nisovin.magicspells.util.magicitems.MagicItem
-import com.nisovin.magicspells.util.magicitems.MagicItems
+import com.sneakyitems.api.SneakyItemsAPI
 import org.bukkit.Bukkit
 import org.bukkit.command.ConsoleCommandSender
 import org.bukkit.entity.ItemDisplay
@@ -29,13 +28,11 @@ import kotlin.test.*
 class GroundItemTheftPresentationTest {
     @Test fun restorationCommitsSaleDataWithoutAnyPresentation() {
         val f = Fixture()
-        val definition = mock(MagicItem::class.java)
         val restored = mock(ItemStack::class.java)
-        doReturn(restored).`when`(definition).itemStack
         doReturn(restored).`when`(restored).clone()
         val console = mock(ConsoleCommandSender::class.java)
-        mockStatic(MagicItems::class.java).use { items ->
-            items.`when`<MagicItem> { MagicItems.getMagicItemByInternalName("bread") }.thenReturn(definition)
+        mockStatic(SneakyItemsAPI::class.java).use { items ->
+            items.`when`<ItemStack> { SneakyItemsAPI.getItemStack("bread") }.thenReturn(restored)
             mockStatic(Bukkit::class.java).use { bukkit ->
                 bukkit.`when`<ConsoleCommandSender> { Bukkit.getConsoleSender() }.thenReturn(console)
                 bukkit.`when`<Boolean> { Bukkit.dispatchCommand(console, MagicSpellsCommands.shopliftingNotice("Dani")) }.thenReturn(true)

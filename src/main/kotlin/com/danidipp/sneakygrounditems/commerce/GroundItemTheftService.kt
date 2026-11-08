@@ -12,7 +12,7 @@ import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.model.SaleSnapshot
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
-import com.nisovin.magicspells.util.magicitems.MagicItems
+import com.sneakyitems.api.SneakyItemsAPI
 import io.papermc.paper.datacomponent.DataComponentTypes
 import io.papermc.paper.datacomponent.item.CustomModelData
 import net.kyori.adventure.text.Component
@@ -143,7 +143,7 @@ internal class GroundItemTheftService(
     }
 
     private fun createMagicItemStack(magicItemId: String): ItemStack? {
-        return MagicItems.getMagicItemByInternalName(magicItemId)?.itemStack?.clone()
+        return SneakyItemsAPI.getItemStack(magicItemId)?.clone()
     }
 
     private fun copyTransformation(transformation: Transformation): Transformation {

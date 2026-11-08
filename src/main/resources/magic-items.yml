@@ -1,0 +1,16 @@
+# Stolen goods item owned by SneakyGroundItems / SneakyItems (PDC namespace magicspells).
+# Extracted from Desktop spells-city-goo.yml magic-items (item-stolengoods only).
+
+magic-items:
+    item-stolengoods:
+        type: "rabbit_foot"
+        custom-model-data: 246
+        name: "&4Stolen Goods"
+        max-stack-size: 1
+        ignored-attributes:
+            - max-stack-size
+        lore:
+            - "&7Value: &4Unknown"
+            - "&7Stolen goods that can be fenced"
+            - "&7in the sewers for coin."
+            - "&7This item is &4CONTRABAND."

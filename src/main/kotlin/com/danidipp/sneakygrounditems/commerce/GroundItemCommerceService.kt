@@ -22,7 +22,7 @@ import com.danidipp.sneakygrounditems.model.GroundItemPolicy
 import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
-import com.nisovin.magicspells.util.magicitems.MagicItems
+import com.sneakyitems.api.SneakyItemsAPI
 import com.sneakybagofholding.api.BagOfHoldingApi
 import com.sk89q.worldedit.math.BlockVector3
 import org.bukkit.Bukkit
@@ -330,9 +330,7 @@ internal class GroundItemCommerceService(
     }
 
     private fun createMagicItemStack(magicItemId: String): ItemStack? {
-        return MagicItems.getMagicItemByInternalName(magicItemId)
-            ?.itemStack
-            ?.clone()
+        return SneakyItemsAPI.getItemStack(magicItemId)?.clone()
     }
 
     private fun countInventoryMagicItems(player: Player, magicItemId: String): Int {
@@ -492,8 +490,8 @@ internal class GroundItemCommerceService(
             return message
         }
 
-        val soldMagicItem = MagicItems.getMagicItemByInternalName(soldMagicItemId)
-        if (soldMagicItem == null) {
+        val soldStack = SneakyItemsAPI.getItemStack(soldMagicItemId)
+        if (soldStack == null) {
             return message
                 .append(Component.text(" from selling ", NamedTextColor.YELLOW))
                 .append(Component.text("an unknown item (ID: $soldMagicItemId)", NamedTextColor.RED))
@@ -502,7 +500,7 @@ internal class GroundItemCommerceService(
         return message
             .append(Component.text(" from selling ", NamedTextColor.YELLOW))
             .append(Component.text("${soldAmount}x ", NamedTextColor.GOLD))
-            .append(soldMagicItem.itemStack.displayName())
+            .append(soldStack.displayName())
     }
 
     private data class CommerceData(
