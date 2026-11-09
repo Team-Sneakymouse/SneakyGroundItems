@@ -67,6 +67,8 @@ dependencies {
     compileOnly("io.github.team-sneakymouse:sneakybagofholding:2026.10.09-a79a55f6d44b") {
         isTransitive = false
     }
+    // optional at runtime: SneakyDiagnostics measures the plugin when installed (integration/Probe.java); never bundled
+    compileOnly("io.github.team-sneakymouse:SneakyDiagnostics-API:2026.10.30-3b422b67e32e")
 
     testImplementation(kotlin("test"))
     testImplementation("org.mockito:mockito-core:5.23.0")

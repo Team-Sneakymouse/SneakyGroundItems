@@ -29,3 +29,8 @@ dependencies:
       load: BEFORE
       required: false
       join-classpath: true
+    # Optional: measurements only (integration/Probe.java). join-classpath lets the probe see its API.
+    SneakyDiagnostics:
+      load: BEFORE
+      required: false
+      join-classpath: true

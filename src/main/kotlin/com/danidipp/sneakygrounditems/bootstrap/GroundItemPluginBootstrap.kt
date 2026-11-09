@@ -35,7 +35,7 @@ internal class GroundItemPluginBootstrap(
         Bukkit.getPluginManager().registerEvents(GroundItemInteractionListener(context.interactionService), plugin)
         Bukkit.getPluginManager().registerEvents(GroundItemInventoryListener(context.commerceService), plugin)
         Bukkit.getPluginManager().registerEvents(GroundItemChunkListener(context.displayService), plugin)
-        val labels = GroundItemLabels.create(plugin, context.persistence, context.placementService)
+        val labels = GroundItemLabels.create(plugin, context.persistence, context.placementService, plugin.probe)
         labels.start()
         return labels
     }
