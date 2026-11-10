@@ -11,6 +11,10 @@ permissions:
     default: false
 dependencies:
   server:
+    SneakyUtils:
+      load: BEFORE
+      required: true
+      join-classpath: true
     SneakyItems:
       load: BEFORE
       required: true
