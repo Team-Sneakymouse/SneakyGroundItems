@@ -27,7 +27,7 @@ class SneakyGroundItems : JavaPlugin() {
 
     /** Own MagicsSpells-style stolen-goods def under resources/magic-items.yml; PDC namespace stays magicspells. */
     private fun registerMagicItems() {
-        saveResource("magic-items.yml", false)
+        if (!java.io.File(dataFolder, "magic-items.yml").exists()) saveResource("magic-items.yml", false)
         SneakyItemsAPI.clearOwner(this)
         val n = SneakyItemsAPI.registerMagicItemsFile(this, "magicspells", File(dataFolder, "magic-items.yml"))
         logger.info("Registered $n magic item(s) with SneakyItems.")
