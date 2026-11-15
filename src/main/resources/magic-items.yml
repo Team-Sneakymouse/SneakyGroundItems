@@ -4,7 +4,7 @@
 magic-items:
     item-stolengoods:
         type: "rabbit_foot"
-        custom-model-data: 246
+        item-model: "lom:items/stolengoods"
         name: "&4Stolen Goods"
         max-stack-size: 1
         ignored-attributes:

@@ -1,7 +1,6 @@
 package com.danidipp.sneakygrounditems.commerce
 
 import io.papermc.paper.datacomponent.DataComponentTypes
-import io.papermc.paper.datacomponent.item.CustomModelData
 import io.papermc.paper.datacomponent.item.ItemLore
 import io.papermc.paper.datacomponent.item.TooltipDisplay
 import net.kyori.adventure.text.Component
@@ -27,6 +26,7 @@ import com.sneakybagofholding.api.BagOfHoldingApi
 import com.sk89q.worldedit.math.BlockVector3
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -411,7 +411,7 @@ internal class GroundItemCommerceService(
 
     private fun createPurchaseButton(stack: ItemStack, saleData: CommerceData): ItemStack {
         return rabbitFootWithMeta(
-            customModelData = 7,
+            itemModel = INVISIBLE_ITEM_MODEL,
             name = Component.text("Purchase", NamedTextColor.GREEN),
             lore = listOf(
                 Component.text()
@@ -425,7 +425,7 @@ internal class GroundItemCommerceService(
 
     private fun createNoButton(): ItemStack {
         return rabbitFootWithMeta(
-            customModelData = 7,
+            itemModel = INVISIBLE_ITEM_MODEL,
             name = Component.text("No", NamedTextColor.RED),
             lore = listOf(Component.text("Cancel", NamedTextColor.GRAY)),
         )
@@ -433,17 +433,17 @@ internal class GroundItemCommerceService(
 
     private fun createBackground(): ItemStack {
         return ItemStack(Material.JIGSAW).apply {
-            setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(3013f))
+            setData(DataComponentTypes.ITEM_MODEL, CONFIRM_PURCHASE_BACKGROUND_MODEL)
             setData(DataComponentTypes.TOOLTIP_DISPLAY, TooltipDisplay.tooltipDisplay().hideTooltip(true))
         }
     }
 
     private fun rabbitFootWithMeta(
-        customModelData: Int,
+        itemModel: NamespacedKey,
         name: Component,
         lore: List<Component>,
     ): ItemStack = ItemStack(Material.RABBIT_FOOT).apply {
-        setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(customModelData.toFloat()))
+        setData(DataComponentTypes.ITEM_MODEL, itemModel)
         setData(DataComponentTypes.ITEM_NAME, name)
         setData(DataComponentTypes.LORE, ItemLore.lore(lore.map { it.decorationIfAbsent(TextDecoration.ITALIC, TextDecoration.State.FALSE) }))
     }
@@ -519,9 +519,11 @@ internal class GroundItemCommerceService(
     companion object {
         private const val PAYMENT_ITEM_SCALE = 0.5f
         private const val BANK_EPSILON = 1.0e-6
+        private val INVISIBLE_ITEM_MODEL = NamespacedKey("lom", "invisible")
+        private val CONFIRM_PURCHASE_BACKGROUND_MODEL = NamespacedKey("lom", "gui/confirmpurchase")
 
         private fun createPaymentStack(currency: Currency) = ItemStack(Material.RABBIT_FOOT).apply {
-            setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(currency.customModelData.toFloat()))
+            setData(DataComponentTypes.ITEM_MODEL, currency.itemModel)
         }
     }
 }

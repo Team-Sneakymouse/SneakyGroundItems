@@ -14,10 +14,10 @@ import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
 import com.sneakyitems.api.SneakyItemsAPI
 import io.papermc.paper.datacomponent.DataComponentTypes
-import io.papermc.paper.datacomponent.item.CustomModelData
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Material
+import org.bukkit.NamespacedKey
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
@@ -119,7 +119,7 @@ internal class GroundItemTheftService(
 
     private fun convertToStolen(display: ItemDisplay, snapshot: SaleSnapshot) {
         display.setItemStack(ItemStack(Material.RABBIT_FOOT).apply {
-            setData(DataComponentTypes.CUSTOM_MODEL_DATA, CustomModelData.customModelData().addFloat(STOLEN_ITEM_NOTICE_MODEL_DATA))
+            setData(DataComponentTypes.ITEM_MODEL, STOLEN_ITEM_NOTICE_MODEL)
         })
         display.transformation = placementService.rescaleTransformation(display.transformation, STOLEN_ITEM_SCALE)
         persistence.setSaleSnapshot(display, snapshot)
@@ -163,6 +163,6 @@ internal class GroundItemTheftService(
     private companion object {
         const val STOLEN_GOODS_MAGIC_ITEM_ID = "item-stolengoods"
         const val STOLEN_ITEM_SCALE = 0.5f
-        const val STOLEN_ITEM_NOTICE_MODEL_DATA = 247f
+        val STOLEN_ITEM_NOTICE_MODEL = NamespacedKey("lom", "items/gponotice")
     }
 }
