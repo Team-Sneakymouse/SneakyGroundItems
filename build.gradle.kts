@@ -36,7 +36,7 @@ repositories {
         url = uri("https://maven.playpro.com")
     }
     mavenCentral()
-    maven("https://maven.sneakyrp.com/releases")
+    maven("https://maven.sneakyrp.com/sneakymouse")
 }
 
 dependencies {
@@ -62,6 +62,9 @@ dependencies {
         isTransitive = false
     }
     compileOnly("io.github.team-sneakymouse:sneakyitems:2026.11.08-edc6088f8201") {
+        isTransitive = false
+    }
+    compileOnly("io.github.team-sneakymouse:sneakyvariables:2026.11.17-8fcaabc393e3") {
         isTransitive = false
     }
     compileOnly("io.github.team-sneakymouse:magicspells:2026.10.15-f0a44ae377a3") {
@@ -142,7 +145,7 @@ publishing {
     repositories {
         maven {
             name = "sneakyrp"
-            url = uri("https://maven.sneakyrp.com/releases")
+            url = uri("https://maven.sneakyrp.com/sneakymouse")
             credentials(PasswordCredentials::class)
             authentication {
                 create<org.gradle.authentication.http.BasicAuthentication>("basic")
