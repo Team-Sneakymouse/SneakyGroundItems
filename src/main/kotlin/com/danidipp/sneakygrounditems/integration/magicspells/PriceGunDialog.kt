@@ -2,7 +2,8 @@ package com.danidipp.sneakygrounditems.integration.magicspells
 
 import com.danidipp.sneakygrounditems.command.Command
 import com.danidipp.sneakygrounditems.commerce.Currency
-import com.nisovin.magicspells.MagicSpells
+import com.sneakyvariables.api.Scope
+import com.sneakyvariables.api.SneakyVariables
 import io.papermc.paper.dialog.Dialog
 import io.papermc.paper.registry.data.dialog.ActionButton
 import io.papermc.paper.registry.data.dialog.DialogBase
@@ -40,8 +41,8 @@ internal object PriceGunDialog {
     }
 
     fun show(player: Player, currency: Currency, error: Component? = null) {
-        val variables = MagicSpells.getVariableManager()
-        val current = variables?.getValue(variableName(currency), player)?.toLong()?.coerceAtLeast(0) ?: 0
+        val name = variableName(currency)
+        val current = number(player, name).toLong().coerceAtLeast(0)
         val body = buildList {
             add(DialogBody.plainMessage(Component.text("Type the $currency price for your next shot.")))
             if (error != null) add(DialogBody.plainMessage(error))
@@ -55,7 +56,7 @@ internal object PriceGunDialog {
                     show(who, currency, Component.text("That isn't a whole number. Try again.", NamedTextColor.RED))
                     return@customClick
                 }
-                MagicSpells.getVariableManager()?.set(variableName(currency), who, price.toDouble())
+                setNumber(who, variableName(currency), price.toDouble())
                 who.playSound(who.location, "lom:sfx.pricegun", SoundCategory.MASTER, 0.5f, 1.0f)
                 reopenMenu(who, currency)
             }, ClickCallback.Options.builder().uses(1).build()),
@@ -89,5 +90,25 @@ internal object PriceGunDialog {
 
     private fun reopenMenu(player: Player, currency: Currency) {
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "ms cast as ${player.name} ${menuSpell(currency)}")
+    }
+
+    private fun number(player: Player, name: String): Double {
+        val def = SneakyVariables.api().definition(name) ?: return 0.0
+        val owner = when (def.scope()) {
+            Scope.PLAYER -> SneakyVariables.api().player(player)
+            Scope.CHARACTER -> SneakyVariables.api().character(player) ?: return 0.0
+            Scope.GLOBAL -> SneakyVariables.api().global()
+        }
+        return owner.getNumber(name)
+    }
+
+    private fun setNumber(player: Player, name: String, value: Double) {
+        val def = SneakyVariables.api().definition(name) ?: return
+        val owner = when (def.scope()) {
+            Scope.PLAYER -> SneakyVariables.api().player(player)
+            Scope.CHARACTER -> SneakyVariables.api().character(player) ?: return
+            Scope.GLOBAL -> SneakyVariables.api().global()
+        }
+        owner.setNumber(name, value)
     }
 }

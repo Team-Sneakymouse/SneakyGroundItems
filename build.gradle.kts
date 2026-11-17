@@ -64,6 +64,9 @@ dependencies {
     compileOnly("io.github.team-sneakymouse:sneakyitems:2026.11.08-edc6088f8201") {
         isTransitive = false
     }
+    compileOnly("io.github.team-sneakymouse:sneakyvariables:2026.11.17-8fcaabc393e3") {
+        isTransitive = false
+    }
     compileOnly("io.github.team-sneakymouse:magicspells:2026.10.15-f0a44ae377a3") {
         isTransitive = false
     }

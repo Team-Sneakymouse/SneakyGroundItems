@@ -19,9 +19,14 @@ dependencies:
       load: BEFORE
       required: true
       join-classpath: true
-    MagicSpells:
+    SneakyVariables:
       load: BEFORE
       required: true
+      join-classpath: true
+    MagicSpells:
+      load: BEFORE
+      required: false
+      join-classpath: true
     WorldGuard:
       load: BEFORE
       required: false
