@@ -10,7 +10,24 @@ class ChunkLabelCacheTest {
     private val world = UUID(0, 10)
     private val label = GroundItemLabel(Component.text("Sale"), BlockFace.UP)
 
-    private fun item(n: Long) = ChunkLabelItem("item-$n", UUID(0, n), n.toInt(), 0.0, 0.0, 0.0, label)
+    private fun item(n: Long) = ChunkLabelItem("item-$n", UUID(0, n), n.toInt(), 0.0, 0.0, 0.0) { label }
+
+    @Test fun aLabelIsBuiltOnlyWhenFirstUsedAndThenShared() {
+        var builds = 0
+        val item = ChunkLabelItem("item", UUID(0, 1), 1, 0.0, 0.0, 0.0) { builds++; label }
+        assertEquals(0, builds) // Reading the chunk builds nothing.
+        assertSame(label, item.label)
+        assertSame(label, item.label) // A second viewer reuses it.
+        assertEquals(1, builds)
+    }
+
+    @Test fun aMalformedLabelIsBuiltOnceAndStaysNull() {
+        var builds = 0
+        val item = ChunkLabelItem("item", UUID(0, 1), 1, 0.0, 0.0, 0.0) { builds++; null }
+        assertNull(item.label)
+        assertNull(item.label)
+        assertEquals(1, builds)
+    }
 
     @Test fun aChunkIsReadOnceAndSharedUntilItIsTenTicksOld() {
         val cache = ChunkLabelCache<String>(10)
@@ -43,7 +60,7 @@ class ChunkLabelCacheTest {
         val read = { reads++; if (loaded) listOf(item(1)) else null }
         assertTrue(cache.get(world, 0, 0, 0, read).isEmpty())
         loaded = true
-        assertEquals(listOf(item(1)), cache.get(world, 0, 0, 1, read))
+        assertEquals(listOf(UUID(0, 1)), cache.get(world, 0, 0, 1, read).map { it.id })
         assertEquals(2, reads)
     }
 

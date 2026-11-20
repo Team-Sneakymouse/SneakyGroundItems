@@ -208,8 +208,9 @@ private class BukkitLabelEnvironment(
                 if (distance > radiusSquared) continue
                 val display = item.handle
                 if (!display.isValid || !player.canSee(display)) continue
+                val label = item.label ?: continue
                 sources += LabelSource(
-                    item.id, world.uid, item.entityId, item.x, item.y, item.z, distance, item.label,
+                    item.id, world.uid, item.entityId, item.x, item.y, item.z, distance, label,
                     display.isTrackedBy(player),
                     display.passengers.filter { player.canSee(it) && it.isTrackedBy(player) }.map { it.entityId },
                 )
@@ -220,13 +221,16 @@ private class BukkitLabelEnvironment(
     }
 
     /**
-     * Reads one chunk's labelled ground items: the only place that reads their PDC and builds labels.
+     * Reads one chunk's labelled ground items: the only place that reads their ground-item PDC. Labels are built
+     * later, only for items some viewer is within range of.
      * Only already-loaded chunks and entities are read; null leaves the chunk uncached so a later refresh retries.
      */
     private fun readChunk(world: World, chunkX: Int, chunkZ: Int): List<ChunkLabelItem<ItemDisplay>>? {
-        if (!world.isChunkLoaded(chunkX, chunkZ)) return null
+        if (!world.isChunkLoaded(chunkX, chunkZ) || !world.getChunkAt(chunkX, chunkZ).isEntitiesLoaded) {
+            probe?.count("labels.chunks-unloaded")
+            return null
+        }
         val chunk = world.getChunkAt(chunkX, chunkZ)
-        if (!chunk.isEntitiesLoaded) return null
         val readStarted = probe?.start() ?: 0L
         try {
             val entities = chunk.entities
@@ -239,9 +243,10 @@ private class BukkitLabelEnvironment(
                 val state = persistence.getGroundItemState(item)
                 val showoff = state == GroundItemState.NORMAL && persistence.isShowoff(item)
                 if (state == GroundItemState.NORMAL && !showoff) continue
-                val label = derive(item, state, showoff) ?: continue
                 val position = item.location
-                items += ChunkLabelItem(item, item.uniqueId, item.entityId, position.x, position.y, position.z, label)
+                items += ChunkLabelItem(item, item.uniqueId, item.entityId, position.x, position.y, position.z) {
+                    derive(item, state, showoff)
+                }
             }
             return items
         } finally {

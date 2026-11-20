@@ -2,16 +2,22 @@ package com.danidipp.sneakygrounditems.display.labels
 
 import java.util.UUID
 
-/** One labelled ground item as read from its chunk. [handle] is the live entity in production, anything in tests. */
-internal data class ChunkLabelItem<E>(
+/**
+ * One labelled ground item as read from its chunk. [handle] is the live entity in production, anything in tests.
+ * The label is built on first use, so items no viewer is near never build one; it is then shared until the chunk is
+ * read again. Null when the item's label data is malformed.
+ */
+internal class ChunkLabelItem<E>(
     val handle: E,
     val id: UUID,
     val entityId: Int,
     val x: Double,
     val y: Double,
     val z: Double,
-    val label: GroundItemLabel,
-)
+    deriveLabel: () -> GroundItemLabel?,
+) {
+    val label: GroundItemLabel? by lazy(LazyThreadSafetyMode.NONE, deriveLabel)
+}
 
 /**
  * Labelled ground items per loaded chunk, read once and shared by every viewer near that chunk.
