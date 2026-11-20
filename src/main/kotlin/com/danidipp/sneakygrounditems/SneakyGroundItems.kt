@@ -8,7 +8,7 @@ class SneakyGroundItems : JavaPlugin() {
     private var runtime: AutoCloseable? = null
 
     /** SneakyDiagnostics measurements (optional); names are listed in the README. */
-    internal val probe = Probe(this, "sneakygrounditems-ticks-1")
+    internal val probe = Probe(this, "sneakygrounditems-ticks-2")
 
     override fun onEnable() {
         registerMagicItems()

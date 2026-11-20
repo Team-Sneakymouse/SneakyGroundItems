@@ -6,7 +6,7 @@ Status: implemented, 2026-10-24, following the confirmed shared design. Automate
 
 - Ground items remain real, persistent item displays. Native entity data and entity PDC are the only source of truth.
 - Ground-item labels are client-only text displays, derived from the source item. There are no new world text entities, persisted companions, label files or databases.
-- Labels appear within 16 blocks, remain until beyond 20 blocks, and observe committed item changes on the next 10-tick refresh. Distances are three-dimensional and within one world.
+- Labels appear within 16 blocks, remain until beyond 20 blocks, and observe committed item changes within two 10-tick cycles (a viewer's refresh plus the age of the shared chunk read). Distances are three-dimensional and within one world.
 - Commerce and theft have no dependency on label presentation. A valid transaction succeeds independently of label visibility or packet delivery.
 - Labels ride their real source on the client using vanilla passenger packets. Minecraft handles passenger positioning. There is no editor integration, model-transform mirroring or alternate positioning mode.
 - Use version-pinned Paperweight access to server internals for the packet implementation. No additional runtime packet-library plugin or embedded packet library is planned.
@@ -66,13 +66,15 @@ Presentation reads do not normalize source items, clear malformed PDC or repair 
 
 ## Sampling and proximity
 
-One shared server-thread scheduler distributes player observations across a 10-tick cycle. Use Bukkit's spatial queries over loaded entities around each player, followed by exact spherical distance and ground-item/state filtering. No second global location index, forced chunk loads or per-item tasks.
+One shared server-thread scheduler distributes player observations across a 10-tick cycle. Each loaded chunk's labelled ground items (position and derived label) are read once per cycle from its already-loaded entities and shared by every viewer near it. For each viewer, a horizontal check against each chunk's square skips chunks beyond 20 blocks, then exact spherical distance is computed per cached item. No forced chunk or entity loads, per-item tasks or persisted index.
+
+Changed 2026-11-20: the original design ruled out any second location index and queried entities around each player. Some chunks hold hundreds of sale items, and every viewer re-read their PDC and rebuilt their labels each refresh. The per-chunk read is short-lived (rebuilt every 10 ticks from loaded entities, pruned when no viewer asks for it, never saved), so it is a cache of observations rather than a persistent index.
 
 For each viewer:
 
 1. Discover eligible source items inside 16 blocks.
 2. Retain previous sources through 20 blocks while valid, in the same world and visible to that player.
-3. Read current label inputs; deduplicate derivation for sources shared by viewers.
+3. Read current label inputs once per chunk per cycle; viewers near the same chunk share that read.
 4. Diff desired content/membership against that viewer's current session.
 
 State transitions are observed rather than pushed by commerce. Item removal/untracking can tear down its virtual label as part of packet/entity lifecycle handling without waiting for another business call.

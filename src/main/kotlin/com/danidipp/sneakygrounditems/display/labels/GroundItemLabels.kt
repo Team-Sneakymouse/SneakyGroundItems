@@ -6,6 +6,7 @@ import com.danidipp.sneakygrounditems.display.labels.packet.PaperLabelPackets
 import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import org.bukkit.Bukkit
+import org.bukkit.World
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.plugin.Plugin
 import java.util.UUID
@@ -169,68 +170,105 @@ private class BukkitLabelEnvironment(
     private val placement: PlacementService,
     private val probe: Probe?,
 ) : LabelEnvironment {
-    private val labelCache = mutableMapOf<UUID, GroundItemLabel?>()
+    private val chunks = ChunkLabelCache<ItemDisplay>(GroundItemLabels.REFRESH_TICKS.toLong())
+    private var tick = 0L
     private var nextMalformedWarning = Long.MIN_VALUE
 
     override fun schedule(tick: () -> Unit): AutoCloseable {
         val task = Bukkit.getScheduler().runTaskTimer(plugin, Runnable {
-            labelCache.clear()
+            this.tick++
+            if (this.tick % GroundItemLabels.REFRESH_TICKS == 0L) chunks.prune(this.tick)
             tick()
         }, 1L, 1L)
-        return AutoCloseable { task.cancel() }
+        return AutoCloseable {
+            task.cancel()
+            chunks.clear()
+        }
     }
 
     override fun viewers() = Bukkit.getOnlinePlayers().map { LabelViewer(it.uniqueId, it.world.uid) }
 
     override fun nearby(viewer: LabelViewer): List<LabelSource> {
         val player = Bukkit.getPlayer(viewer.id) ?: return emptyList()
-        if (player.world.uid != viewer.world) return emptyList()
+        val world = player.world
+        if (world.uid != viewer.world) return emptyList()
         val center = player.location
         val radius = GroundItemLabels.LEAVE_RADIUS
-        // Only already-loaded entities around an online player: this is the scan itself, not extra world access.
-        val queryStarted = probe?.start() ?: 0L
-        val entities = player.world.getNearbyEntities(center, radius, radius, radius)
-        if (queryStarted != 0L) {
-            probe?.end("labels.entity-query", queryStarted)
-            probe?.count("labels.entities-queried", entities.size.toLong())
+        val radiusSquared = radius * radius
+        val sources = mutableListOf<LabelSource>()
+        // Coarse check per chunk (horizontal only), then the exact distance per cached item.
+        val inRange = ChunkLabelCache.chunksInRange(center.x, center.z, radius)
+        probe?.count("labels.chunks-checked", inRange.size.toLong())
+        for ((chunkX, chunkZ) in inRange) {
+            for (item in chunks.get(world.uid, chunkX, chunkZ, tick) { readChunk(world, chunkX, chunkZ) }) {
+                val dx = item.x - center.x
+                val dy = item.y - center.y
+                val dz = item.z - center.z
+                val distance = dx * dx + dy * dy + dz * dz
+                if (distance > radiusSquared) continue
+                val display = item.handle
+                if (!display.isValid || !player.canSee(display)) continue
+                sources += LabelSource(
+                    item.id, world.uid, item.entityId, item.x, item.y, item.z, distance, item.label,
+                    display.isTrackedBy(player),
+                    display.passengers.filter { player.canSee(it) && it.isTrackedBy(player) }.map { it.entityId },
+                )
+            }
         }
-        return entities.asSequence()
-            .filterIsInstance<ItemDisplay>()
-            .filter { it.isValid && persistence.isGroundItemDisplay(it) && player.canSee(it) }
-            .mapNotNull { item ->
+        probe?.count("labels.candidates", sources.size.toLong())
+        return sources
+    }
+
+    /**
+     * Reads one chunk's labelled ground items: the only place that reads their PDC and builds labels.
+     * Only already-loaded chunks and entities are read; null leaves the chunk uncached so a later refresh retries.
+     */
+    private fun readChunk(world: World, chunkX: Int, chunkZ: Int): List<ChunkLabelItem<ItemDisplay>>? {
+        if (!world.isChunkLoaded(chunkX, chunkZ)) return null
+        val chunk = world.getChunkAt(chunkX, chunkZ)
+        if (!chunk.isEntitiesLoaded) return null
+        val readStarted = probe?.start() ?: 0L
+        try {
+            val entities = chunk.entities
+            probe?.count("labels.chunks-read")
+            probe?.count("labels.entities-read", entities.size.toLong())
+            val items = ArrayList<ChunkLabelItem<ItemDisplay>>()
+            for (entity in entities) {
+                val item = entity as? ItemDisplay ?: continue
+                if (!item.isValid || !persistence.isGroundItemDisplay(item)) continue
                 val state = persistence.getGroundItemState(item)
                 val showoff = state == GroundItemState.NORMAL && persistence.isShowoff(item)
-                if (state == GroundItemState.NORMAL && !showoff) return@mapNotNull null
+                if (state == GroundItemState.NORMAL && !showoff) continue
+                val label = derive(item, state, showoff) ?: continue
                 val position = item.location
-                val distance = position.distanceSquared(center)
-                if (distance > radius * radius) return@mapNotNull null
-                if (item.uniqueId !in labelCache) {
-                    // A cache miss builds the item's display name (CraftItemFactory.displayName) and derives the label.
-                    val deriveStarted = probe?.start() ?: 0L
-                    try {
-                        val stack = item.itemStack
-                        labelCache[item.uniqueId] = GroundItemLabel.derive(
-                            state, stack.displayName(), stack.amount, persistence.getCurrency(item), persistence.getPrice(item),
-                            persistence.getFace(item) ?: placement.deriveFace(item), showoff,
-                        )
-                    } finally {
-                        if (deriveStarted != 0L) probe?.end("labels.derive", deriveStarted)
-                    }
-                }
-                val label = labelCache[item.uniqueId]
-                if (label == null) {
-                    val now = System.nanoTime()
-                    if (now >= nextMalformedWarning) {
-                        nextMalformedWarning = now + 60_000_000_000L
-                        plugin.logger.warning("Ground item ${item.uniqueId} has incomplete label data; its stored state was preserved")
-                    }
-                    return@mapNotNull null
-                }
-                LabelSource(
-                    item.uniqueId, item.world.uid, item.entityId, position.x, position.y, position.z, distance, label,
-                    item.isTrackedBy(player), item.passengers.filter { player.canSee(it) && it.isTrackedBy(player) }.map { it.entityId },
-                )
-            }.toList().also { if (queryStarted != 0L) probe?.count("labels.candidates", it.size.toLong()) }
+                items += ChunkLabelItem(item, item.uniqueId, item.entityId, position.x, position.y, position.z, label)
+            }
+            return items
+        } finally {
+            if (readStarted != 0L) probe?.end("labels.chunk-read", readStarted)
+        }
+    }
+
+    /** Builds the item's display name (CraftItemFactory.displayName) and derives the label; null when malformed. */
+    private fun derive(item: ItemDisplay, state: GroundItemState, showoff: Boolean): GroundItemLabel? {
+        val deriveStarted = probe?.start() ?: 0L
+        val label = try {
+            val stack = item.itemStack
+            GroundItemLabel.derive(
+                state, stack.displayName(), stack.amount, persistence.getCurrency(item), persistence.getPrice(item),
+                persistence.getFace(item) ?: placement.deriveFace(item), showoff,
+            )
+        } finally {
+            if (deriveStarted != 0L) probe?.end("labels.derive", deriveStarted)
+        }
+        if (label == null) {
+            val now = System.nanoTime()
+            if (now >= nextMalformedWarning) {
+                nextMalformedWarning = now + 60_000_000_000L
+                plugin.logger.warning("Ground item ${item.uniqueId} has incomplete label data; its stored state was preserved")
+            }
+        }
+        return label
     }
 
     override fun warning(message: String, cause: Exception) {
