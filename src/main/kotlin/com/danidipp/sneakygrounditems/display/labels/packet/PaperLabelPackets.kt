@@ -1,6 +1,5 @@
 package com.danidipp.sneakygrounditems.display.labels.packet
 
-import com.danidipp.sneakygrounditems.config.Constants
 import com.danidipp.sneakygrounditems.display.labels.LabelPackets
 import com.danidipp.sneakygrounditems.display.labels.LabelSource
 import com.mojang.math.Transformation
@@ -81,7 +80,6 @@ internal class PaperLabelPackets(private val plugin: Plugin) : LabelPackets {
             text.setPos(source.x, source.y, source.z)
             text.setText(PaperAdventure.asVanilla(source.label.text))
             text.setNoGravity(true)
-            text.setViewRange(Constants.TEXT_DISPLAY_VIEW_RANGE)
             val face = source.label.face
             val wall = face != BlockFace.UP && face != BlockFace.DOWN
             val offset = if (wall) Vector3f(0f, TEXT_OFFSET, 0f)

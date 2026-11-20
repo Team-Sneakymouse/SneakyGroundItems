@@ -1,6 +1,5 @@
 package com.danidipp.sneakygrounditems.display
 
-import com.danidipp.sneakygrounditems.config.Constants
 import com.danidipp.sneakygrounditems.integration.magicspells.GroundItemMetadataService
 import com.danidipp.sneakygrounditems.lock.LockService
 import com.danidipp.sneakygrounditems.model.GroundItemState
@@ -39,7 +38,6 @@ internal class GroundItemDisplayService(
                         persistence.removeDisplay(entity)
                         continue
                     }
-                    entity.viewRange = Constants.ITEM_DISPLAY_VIEW_RANGE
                     lockService.clearExpiredTemporaryLock(entity)
                     lockService.clearInvalidPlotLock(entity)
                     when (persistence.getGroundItemState(entity)) {

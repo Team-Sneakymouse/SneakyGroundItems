@@ -4,7 +4,7 @@ Status: implemented, 2026-10-24, following the confirmed shared design. Automate
 
 ## Confirmed behavior
 
-- Ground items remain real, persistent item displays. Native entity data and entity PDC are the only source of truth. The global display tracking range remains 128.
+- Ground items remain real, persistent item displays. Native entity data and entity PDC are the only source of truth.
 - Ground-item labels are client-only text displays, derived from the source item. There are no new world text entities, persisted companions, label files or databases.
 - Labels appear within 16 blocks, remain until beyond 20 blocks, and observe committed item changes on the next 10-tick refresh. Distances are three-dimensional and within one world.
 - Commerce and theft have no dependency on label presentation. A valid transaction succeeds independently of label visibility or packet delivery.
