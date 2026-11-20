@@ -35,7 +35,7 @@ internal class GroundItemDisplayService(
                 entity is ItemDisplay && persistence.isGroundItemDisplay(entity) -> {
                     // Old companion references are migration data, never live ownership.
                     persistence.setPartnerUuid(entity, null)
-                    if (metadataService.hasExpiredMagicSpellsLifetime(entity.itemStack, now)) {
+                    if (metadataService.isExpired(entity.itemStack, now)) {
                         persistence.removeDisplay(entity)
                         continue
                     }

@@ -1,5 +1,7 @@
 package com.danidipp.sneakygrounditems.integration.magicspells
 
+import com.sneakyitems.api.SneakyItemsAPI
+import com.sneakyitems.util.items.ItemBehaviors
 import org.bukkit.NamespacedKey
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.Damageable
@@ -8,7 +10,6 @@ import org.bukkit.persistence.PersistentDataType
 import java.util.UUID
 
 internal class GroundItemMetadataService {
-    private val magicItemKey = NamespacedKey("magicspells", "magicitem")
     private val soulboundOwnerKey = NamespacedKey("magicspells", "soulbound_owner")
     private val groundItemSellableKey = NamespacedKey("magicspells", "magicspellpermanentdata_grounditem_sellable")
     private val groundItemPlaceableKey = NamespacedKey("magicspells", "magicspellpermanentdata_grounditem_placeable")
@@ -18,15 +19,12 @@ internal class GroundItemMetadataService {
         return meta.persistentDataContainer.has(soulboundOwnerKey, PersistentDataType.STRING)
     }
 
-    fun hasExpiredMagicSpellsLifetime(stack: ItemStack, nowMillis: Long = System.currentTimeMillis()): Boolean {
+    fun isExpired(stack: ItemStack, nowMillis: Long = System.currentTimeMillis()): Boolean {
         val meta = stack.itemMeta ?: return false
-        return MagicSpellsItemExpiry.isExpired(meta, nowMillis)
+        return ItemExpiry.isExpired(meta, nowMillis)
     }
 
-    fun hasMagicSpellsExpiry(stack: ItemStack): Boolean {
-        val meta = stack.itemMeta ?: return false
-        return MagicSpellsItemExpiry.hasExpiry(meta)
-    }
+    fun hasExpiry(stack: ItemStack): Boolean = ItemBehaviors.hasExpiration(stack)
 
     fun isExplicitlyUnsellable(stack: ItemStack): Boolean {
         val meta = stack.itemMeta ?: return false
@@ -51,10 +49,7 @@ internal class GroundItemMetadataService {
         return ownerUuid != playerUuid
     }
 
-    fun getMagicItemId(stack: ItemStack): String? {
-        val meta = stack.itemMeta ?: return null
-        return meta.persistentDataContainer.get(magicItemKey, PersistentDataType.STRING)
-    }
+    fun getMagicItemId(stack: ItemStack): String? = SneakyItemsAPI.keyOf(stack)
 
     fun hasFullDurability(stack: ItemStack): Boolean {
         val damageable = stack.itemMeta as? Damageable ?: return true

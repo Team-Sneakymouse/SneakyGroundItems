@@ -58,10 +58,10 @@ dependencies {
     compileOnly("net.coreprotect:coreprotect:23.2") {
         isTransitive = false
     }
-    compileOnly("io.github.team-sneakymouse:sneakyutils:2026.11.10-7e1262ebd376") {
+    compileOnly("io.github.team-sneakymouse:sneakyutils:2026.11.18-9392615fb7ee") {
         isTransitive = false
     }
-    compileOnly("io.github.team-sneakymouse:sneakyitems:2026.11.08-edc6088f8201") {
+    compileOnly("io.github.team-sneakymouse:sneakyitems:2026.11.18-8682c12c983d") {
         isTransitive = false
     }
     compileOnly("io.github.team-sneakymouse:sneakyvariables:2026.11.17-8fcaabc393e3") {

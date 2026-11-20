@@ -48,7 +48,7 @@ internal class GroundItemTheftService(
                 state = persistence.getGroundItemState(display),
                 hasMagicItemId = magicItemId != null,
                 magicItemResolves = originalMagicItemResolves,
-                hasExpiry = metadataService.hasMagicSpellsExpiry(stack),
+                hasExpiry = metadataService.hasExpiry(stack),
                 hasFullDurability = metadataService.hasFullDurability(stack),
             )
         if (!GroundItemPolicy.canSteal(eligibility)) {

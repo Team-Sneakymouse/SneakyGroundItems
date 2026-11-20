@@ -61,7 +61,7 @@ internal class GroundItemCommerceService(
         }
 
         val display = lookupService.findLookedAtGroundItem(player) ?: return GroundItemCommandResult(false, null)
-        if (metadataService.hasExpiredMagicSpellsLifetime(display.itemStack)) {
+        if (metadataService.isExpired(display.itemStack)) {
             displayService.removeDisplay(display)
             return GroundItemCommandResult(false, Component.text("That ground item has expired"))
         }
@@ -70,7 +70,7 @@ internal class GroundItemCommerceService(
         if (!GroundItemPolicy.canSell(state)) {
             return GroundItemCommandResult(false, Component.text("Only normal and sale ground items can be sold"))
         }
-        if (state == GroundItemState.NORMAL && metadataService.hasMagicSpellsExpiry(display.itemStack)) {
+        if (state == GroundItemState.NORMAL && metadataService.hasExpiry(display.itemStack)) {
             return GroundItemCommandResult(false, Component.text("Ground items with an expiry cannot be sold"))
         }
         if (state == GroundItemState.NORMAL && lockService.getLockMode(display) != LockService.LockMode.NONE) {
