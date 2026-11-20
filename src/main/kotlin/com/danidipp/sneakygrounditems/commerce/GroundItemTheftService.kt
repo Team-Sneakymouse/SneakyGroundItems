@@ -2,6 +2,7 @@ package com.danidipp.sneakygrounditems.commerce
 
 import com.danidipp.sneakygrounditems.SneakyGroundItems
 import com.danidipp.sneakygrounditems.display.GroundItemDisplayService
+import com.danidipp.sneakygrounditems.display.PaperDisplayLook
 import com.danidipp.sneakygrounditems.display.PlacementService
 import com.danidipp.sneakygrounditems.integration.magicspells.GroundItemMetadataService
 import com.danidipp.sneakygrounditems.integration.magicspells.MagicSpellsCommands
@@ -13,10 +14,8 @@ import com.danidipp.sneakygrounditems.model.SaleSnapshot
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
 import com.sneakyitems.api.SneakyItemsAPI
-import io.papermc.paper.datacomponent.DataComponentTypes
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
-import org.bukkit.Material
 import org.bukkit.NamespacedKey
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.entity.Player
@@ -118,9 +117,7 @@ internal class GroundItemTheftService(
     }
 
     private fun convertToStolen(display: ItemDisplay, snapshot: SaleSnapshot) {
-        display.setItemStack(ItemStack(Material.RABBIT_FOOT).apply {
-            setData(DataComponentTypes.ITEM_MODEL, STOLEN_ITEM_NOTICE_MODEL)
-        })
+        display.setItemStack(PaperDisplayLook.stackWithModel(STOLEN_ITEM_NOTICE_MODEL))
         display.transformation = placementService.rescaleTransformation(display.transformation, STOLEN_ITEM_SCALE)
         persistence.setSaleSnapshot(display, snapshot)
         persistence.setGroundItemState(display, GroundItemState.STOLEN)
@@ -160,9 +157,9 @@ internal class GroundItemTheftService(
         return GroundItemCommandResult(false, component)
     }
 
-    private companion object {
-        const val STOLEN_GOODS_MAGIC_ITEM_ID = "item-stolengoods"
-        const val STOLEN_ITEM_SCALE = 0.5f
+    internal companion object {
+        private const val STOLEN_GOODS_MAGIC_ITEM_ID = "item-stolengoods"
+        private const val STOLEN_ITEM_SCALE = 0.5f
         val STOLEN_ITEM_NOTICE_MODEL = NamespacedKey("lom", "items/gponotice")
     }
 }

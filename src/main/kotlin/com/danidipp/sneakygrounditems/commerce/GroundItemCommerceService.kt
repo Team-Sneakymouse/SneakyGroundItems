@@ -9,6 +9,7 @@ import net.kyori.adventure.text.format.TextDecoration
 import com.danidipp.sneakygrounditems.command.Command
 import com.danidipp.sneakygrounditems.config.Constants
 import com.danidipp.sneakygrounditems.display.GroundItemDisplayService
+import com.danidipp.sneakygrounditems.display.PaperDisplayLook
 import com.danidipp.sneakygrounditems.display.PlacementService
 import com.danidipp.sneakygrounditems.integration.coreprotect.GroundItemAuditService
 import com.danidipp.sneakygrounditems.integration.magicspells.GroundItemMetadataService
@@ -522,8 +523,6 @@ internal class GroundItemCommerceService(
         private val INVISIBLE_ITEM_MODEL = NamespacedKey("lom", "invisible")
         private val CONFIRM_PURCHASE_BACKGROUND_MODEL = NamespacedKey("lom", "gui/confirmpurchase")
 
-        private fun createPaymentStack(currency: Currency) = ItemStack(Material.RABBIT_FOOT).apply {
-            setData(DataComponentTypes.ITEM_MODEL, currency.itemModel)
-        }
+        private fun createPaymentStack(currency: Currency) = PaperDisplayLook.stackWithModel(currency.itemModel)
     }
 }
