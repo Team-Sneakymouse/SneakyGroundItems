@@ -14,3 +14,29 @@ magic-items:
             - "&7Stolen goods that can be fenced"
             - "&7in the sewers for coin."
             - "&7This item is &4CONTRABAND."
+
+    # Price Gun, moved from MagicSpells-Data (spells-item-pricegun-menu.yml). Behaviour: pricegun/PriceGunService.
+    # The older single-mode guns (item-pricegunGold/Silver/Penny/Lock) become this item through the legacy
+    # patterns registered in SneakyGroundItems.registerMagicItems.
+    # Each gun carries its own settings, and its lore shows them: everything after the last blank lore line is
+    # replaced per gun (PriceGunLore), so lore is per-copy. The block here shows the defaults (Gold, price 5).
+    item-pricegun:
+        type: "paper"
+        item-model: "lom:price_gun"
+        name: "&aPrice Gun"
+        max-stack-size: 1
+        ignored-attributes:
+            - lore
+        lore:
+            - "&7Value: &61000 Gold"
+            - "&eOne gun for pricing, locking and showing off"
+            - "&eitems on your plots."
+            - "&f &7Fire the selected mode"
+            - "&eShift &f&7 Copy the price of an item for sale"
+            - "&e <key:key.swapOffhand>  &7Open the Price Gun menu"
+            - ""
+            - "&7Mode: &6Gold"
+            - "&7Price: &e5 Gold"
+        pdc-permanent:
+            store_value_currency: "gold"
+            store_value_amount: "1000"

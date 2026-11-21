@@ -6,6 +6,8 @@ import com.danidipp.sneakygrounditems.display.labels.GroundItemLabels
 import com.danidipp.sneakygrounditems.interaction.GroundItemChunkListener
 import com.danidipp.sneakygrounditems.interaction.GroundItemInteractionListener
 import com.danidipp.sneakygrounditems.interaction.GroundItemInventoryListener
+import com.danidipp.sneakygrounditems.pricegun.PriceGunListener
+import com.danidipp.sneakygrounditems.pricegun.PriceGunService
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents
 import org.bukkit.Bukkit
 
@@ -37,6 +39,20 @@ internal class GroundItemPluginBootstrap(
         Bukkit.getPluginManager().registerEvents(GroundItemChunkListener(context.displayService), plugin)
         val labels = GroundItemLabels.create(plugin, context.persistence, context.placementService, plugin.probe)
         labels.start()
-        return labels
+
+        val priceGun = PriceGunService(
+            plugin = plugin,
+            persistence = context.persistence,
+            lookupService = context.lookupService,
+            commerceService = context.commerceService,
+            lockService = context.lockService,
+        )
+        Bukkit.getPluginManager().registerEvents(PriceGunListener(plugin, priceGun), plugin)
+        priceGun.start()
+
+        return AutoCloseable {
+            priceGun.close()
+            labels.close()
+        }
     }
 }

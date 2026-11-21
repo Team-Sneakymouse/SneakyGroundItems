@@ -28,7 +28,55 @@ internal class LockService(
         PERMANENT,
     }
 
+    enum class Outcome {
+        /** The lock state changed. */
+        CHANGED,
+
+        /** Nothing to do: already in the requested state. */
+        UNCHANGED,
+
+        /** Not allowed on this item or for this actor. */
+        DENIED,
+    }
+
+    data class Result(val outcome: Outcome, val message: Component)
+
     private val lockZone = ZoneId.of("UTC-07:00")
+
+    /** Locks a normal ground item, or turns an existing lock into a showoff lock when [showoff] is set. */
+    fun lock(actor: CommandSender, display: ItemDisplay, showoff: Boolean = false): Result {
+        val stack = display.itemStack
+        if (persistence.getGroundItemState(display).isLockedLike) {
+            return Result(Outcome.UNCHANGED, formatAlreadyBoundMessage(stack))
+        }
+        if (getLockMode(display) != LockMode.NONE) {
+            return when {
+                !showoff -> Result(Outcome.UNCHANGED, formatAlreadyBoundMessage(stack))
+                isShowoff(display) -> Result(Outcome.UNCHANGED, formatAlreadyShowoffMessage(stack))
+                else -> {
+                    showOff(display)
+                    Result(Outcome.CHANGED, formatShowoffMessage(stack))
+                }
+            }
+        }
+        val mode = lockTarget(actor, display, showoff)
+        return Result(Outcome.CHANGED, formatBoundMessage(stack, mode == LockMode.TEMPORARY, showoff))
+    }
+
+    fun unlock(actor: CommandSender, display: ItemDisplay): Result {
+        val stack = display.itemStack
+        if (persistence.getGroundItemState(display).isLockedLike) {
+            return Result(Outcome.DENIED, Component.text("Sale, payment, and stolen ground items cannot be unlocked"))
+        }
+        if (getLockMode(display) == LockMode.NONE) {
+            return Result(Outcome.UNCHANGED, formatAlreadyUnboundMessage(stack))
+        }
+        if (!canUnlock(actor, display)) {
+            return Result(Outcome.DENIED, Component.text("You may not unlock this ground item"))
+        }
+        unlockTarget(display)
+        return Result(Outcome.CHANGED, formatUnboundMessage(stack))
+    }
 
     fun lockTarget(actor: CommandSender, display: ItemDisplay, showoff: Boolean = false): LockMode {
         persistence.setShowoff(display, showoff)

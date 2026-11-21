@@ -2,6 +2,7 @@ package com.danidipp.sneakygrounditems
 
 import com.danidipp.sneakygrounditems.bootstrap.GroundItemPluginBootstrap
 import com.danidipp.sneakygrounditems.integration.Probe
+import com.danidipp.sneakygrounditems.pricegun.PriceGunService
 import com.sneakyitems.api.SneakyItemsAPI
 import org.bukkit.plugin.java.JavaPlugin
 class SneakyGroundItems : JavaPlugin() {
@@ -33,5 +34,15 @@ class SneakyGroundItems : JavaPlugin() {
             n = SneakyItemsAPI.registerFromRoot(this, "magicspells", yaml)
         } ?: logger.warning("Missing bundled resource: magic-items.yml")
         logger.info("Registered $n magic item(s) with SneakyItems.")
+
+        // The single-mode Price Guns (Gold/Silver/Penny/Lock) that predate the unified gun: once no plugin registers
+        // their old names, SneakyItems re-stamps copies by look and rebuilds them as the Price Gun.
+        for (model in LEGACY_PRICE_GUN_MODELS) {
+            SneakyItemsAPI.registerLegacyPattern(this, PriceGunService.ITEM_ID, "rabbit_foot{\"item-model\":\"$model\"}")
+        }
+    }
+
+    private companion object {
+        val LEGACY_PRICE_GUN_MODELS = (218..221).map { "lom:legacy/rabbit_foot/$it" }
     }
 }

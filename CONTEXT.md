@@ -32,6 +32,10 @@ _Avoid_: Any sale item
 The action that lists a normal ground item for sale or reprices an existing sale item. Payment and stolen items are never valid sell targets.
 _Avoid_: Reprice as a separate action
 
+**Price Gun**:
+The magic item `item-pricegun`. Right-click applies its selected mode to the ground item the player aims at, up to 12 blocks away: sell in Gold, Silver or Penny, lock, unlock, or showoff lock. It follows the same rules as `/grounditem sell`, `lock` and `unlock`. Sneak-right-click on a sale item copies that item's price and currency into the gun. F opens the menu for choosing the mode and price. The mode and per-currency prices are stored on the gun itself (PDC keys `sneakygrounditems:pricegun_mode` and `sneakygrounditems:pricegun_price_<currency>`), so handing a gun to someone hands over its settings. A gun without them starts on Gold at price 5.
+_Avoid_: Lock gun (the old single-mode guns now turn into the Price Gun)
+
 **Pop**:
 A player-controlled cleanup that returns nearby unlocked normal ground items to physical item form. It never affects locked, sale, payment, or stolen items.
 _Avoid_: Delete, purge

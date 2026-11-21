@@ -53,6 +53,11 @@ internal class GroundItemCommerceService(
     private val paymentItem: (Currency) -> ItemStack = ::createPaymentStack,
 ) {
     fun sellGroundItem(player: Player, price: Int, currency: Currency): GroundItemCommandResult {
+        val display = lookupService.findLookedAtGroundItem(player) ?: return GroundItemCommandResult(false, null)
+        return sellGroundItem(player, display, price, currency)
+    }
+
+    fun sellGroundItem(player: Player, display: ItemDisplay, price: Int, currency: Currency): GroundItemCommandResult {
         if (price > Command.MAX_SELL_PRICE) {
             return GroundItemCommandResult(false, Component.text("Sell price cannot exceed ${Command.MAX_SELL_PRICE}"))
         }
@@ -61,7 +66,6 @@ internal class GroundItemCommerceService(
             return GroundItemCommandResult(false, Component.text("The $currency bank is unavailable"))
         }
 
-        val display = lookupService.findLookedAtGroundItem(player) ?: return GroundItemCommandResult(false, null)
         if (metadataService.isExpired(display.itemStack)) {
             displayService.removeDisplay(display)
             return GroundItemCommandResult(false, Component.text("That ground item has expired"))

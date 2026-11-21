@@ -4,6 +4,7 @@ object Constants {
     const val INTERACTION_DISTANCE = 2.5
     const val CHECK_RAYCAST_DISTANCE = 8.0
     const val POP_RAYCAST_DISTANCE = 8.0
+    const val PRICE_GUN_RANGE = 12.0
     const val SURFACE_EPSILON = 0.02
     const val SURFACE_RANDOM_OFFSET = 0.01
     const val ACTION_COOLDOWN_MS = 500L

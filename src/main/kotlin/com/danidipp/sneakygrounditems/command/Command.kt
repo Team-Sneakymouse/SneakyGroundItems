@@ -4,7 +4,6 @@ import com.danidipp.sneakygrounditems.commerce.Currency
 import com.danidipp.sneakygrounditems.commerce.GroundItemCommerceService
 import com.danidipp.sneakygrounditems.commerce.GroundItemTheftService
 import com.danidipp.sneakygrounditems.config.Constants
-import com.danidipp.sneakygrounditems.integration.magicspells.PriceGunDialog
 import com.danidipp.sneakygrounditems.interaction.GroundItemInteractionService
 import com.danidipp.sneakygrounditems.interaction.GroundItemLookupService
 import com.danidipp.sneakygrounditems.lock.LockService
@@ -64,15 +63,13 @@ internal class Command(
                     STEAL_PERMISSION,
                     ADMIN_PERMISSION,
                     MODERATOR_PERMISSION,
-                    PRICEGUN_PERMISSION,
                 )
             }
-            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|sell|pricegun|steal|migrate|check> ...") }
+            .executes { fail(it, "Missing subcommand. Usage: /grounditem <lock|unlock|pop|sell|steal|migrate|check> ...") }
             .then(buildLockCommand())
             .then(buildUnlockCommand())
             .then(buildPopCommand())
             .then(buildSellCommand())
-            .then(buildPriceGunCommand())
             .then(buildStealCommand())
             .then(buildMigrateCommand())
             .then(buildCheckCommand())
@@ -131,24 +128,6 @@ internal class Command(
                                 )
                             }
                     )
-            )
-
-    // Opened by the MagicSpells Price Gun menu (item-pricegun-dialog-<currency>) with a temporary permission.
-    private fun buildPriceGunCommand(): LiteralArgumentBuilder<CommandSourceStack> =
-        Commands.literal("pricegun")
-            .requires { it.sender.hasAnyPermission(PRICEGUN_PERMISSION, ADMIN_PERMISSION) }
-            .then(
-                Commands.argument("currency", StringArgumentType.word())
-                    .suggests { _, builder -> suggest(PriceGunDialog.currencies.map { it.id }, builder) }
-                    .executes { context ->
-                        val player = context.source.sender as? Player
-                            ?: return@executes fail(context, "Only players can run /grounditem pricegun")
-                        val currency = Currency.fromId(StringArgumentType.getString(context, "currency"))
-                            ?.takeIf { it in PriceGunDialog.currencies }
-                            ?: return@executes fail(context, "Unknown Price Gun currency")
-                        PriceGunDialog.show(player, currency)
-                        Command.SINGLE_SUCCESS
-                    }
             )
 
     private fun buildMigrateCommand(): LiteralArgumentBuilder<CommandSourceStack> =
@@ -237,46 +216,9 @@ internal class Command(
         val display = lookupService.findLookedAtGroundItem(targetedPlayer)
             ?: return fail(context, "Not looking at a ground item")
 
-        if (lock) {
-            if (persistence.getGroundItemState(display).isLockedLike) {
-                sender.sendMessage(lockService.formatAlreadyBoundMessage(display.itemStack))
-                return Command.SINGLE_SUCCESS
-            }
-            if (lockService.getLockMode(display) != LockService.LockMode.NONE) {
-                when {
-                    !showoff -> sender.sendMessage(lockService.formatAlreadyBoundMessage(display.itemStack))
-                    lockService.isShowoff(display) -> sender.sendMessage(lockService.formatAlreadyShowoffMessage(display.itemStack))
-                    else -> {
-                        lockService.showOff(display)
-                        sender.sendMessage(lockService.formatShowoffMessage(display.itemStack))
-                    }
-                }
-                return Command.SINGLE_SUCCESS
-            }
-            val lockMode = lockService.lockTarget(sender, display, showoff)
-            sender.sendMessage(
-                lockService.formatBoundMessage(
-                    display.itemStack,
-                    lockMode == LockService.LockMode.TEMPORARY,
-                    showoff,
-                ),
-            )
-        } else {
-            if (persistence.getGroundItemState(display).isLockedLike) {
-                return fail(context, "Sale, payment, and stolen ground items cannot be unlocked")
-            }
-            if (lockService.getLockMode(display) == LockService.LockMode.NONE) {
-                sender.sendMessage(lockService.formatAlreadyUnboundMessage(display.itemStack))
-                return Command.SINGLE_SUCCESS
-            }
-            if (!lockService.canUnlock(sender, display)) {
-                return fail(context, "You may not unlock this ground item")
-            }
-            lockService.unlockTarget(display)
-            sender.sendMessage(lockService.formatUnboundMessage(display.itemStack))
-        }
-
-        return Command.SINGLE_SUCCESS
+        val result = if (lock) lockService.lock(sender, display, showoff) else lockService.unlock(sender, display)
+        sender.sendMessage(result.message)
+        return if (result.outcome == LockService.Outcome.DENIED) 0 else Command.SINGLE_SUCCESS
     }
 
     private fun sell(context: CommandContext<CommandSourceStack>, amount: Int, currencyId: String): Int {
@@ -472,7 +414,6 @@ internal class Command(
         const val STEAL_PERMISSION = "sneakygrounditems.command.steal"
         const val ADMIN_PERMISSION = "sneakygrounditems.command.admin"
         const val MODERATOR_PERMISSION = "sneakygrounditems.command.moderator"
-        const val PRICEGUN_PERMISSION = "sneakygrounditems.command.pricegun"
         const val MAX_SELL_PRICE = 999_999_999
         const val UNKNOWN_CREATOR = "unknown"
     }

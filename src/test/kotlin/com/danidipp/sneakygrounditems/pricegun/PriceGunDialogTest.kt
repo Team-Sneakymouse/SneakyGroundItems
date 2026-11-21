@@ -1,4 +1,4 @@
-package com.danidipp.sneakygrounditems.integration.magicspells
+package com.danidipp.sneakygrounditems.pricegun
 
 import com.danidipp.sneakygrounditems.command.Command
 import kotlin.test.Test
