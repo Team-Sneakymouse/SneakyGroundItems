@@ -41,6 +41,8 @@ internal class GroundItemDisplayService(
                         persistence.removeDisplay(entity)
                         continue
                     }
+                    // Items placed before 2026-11-20 saved view range 0.15; every ground item now uses the default.
+                    if (entity.viewRange != DEFAULT_VIEW_RANGE) entity.viewRange = DEFAULT_VIEW_RANGE
                     lockService.clearExpiredTemporaryLock(entity)
                     lockService.clearInvalidPlotLock(entity)
                     when (persistence.getGroundItemState(entity)) {
@@ -99,5 +101,10 @@ internal class GroundItemDisplayService(
             ?.takeIf { persistence.isGroundItemText(it) && persistence.getPartnerUuid(it) == display.uniqueId }
             ?.let(persistence::removeTextDisplay)
         persistence.removeDisplay(display)
+    }
+
+    private companion object {
+        /** Minecraft's own default for displays. */
+        const val DEFAULT_VIEW_RANGE = 1.0f
     }
 }
