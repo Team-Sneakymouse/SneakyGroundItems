@@ -70,6 +70,8 @@ One shared server-thread scheduler distributes player observations across a 10-t
 
 Changed 2026-11-20: the original design ruled out any second location index and queried entities around each player. Some chunks hold hundreds of sale items, and every viewer re-read their PDC and rebuilt their labels each refresh. The per-chunk read is short-lived (rebuilt every 10 ticks from loaded entities, pruned when no viewer asks for it, never saved), so it is a cache of observations rather than a persistent index.
 
+Changed 2026-11-22: rebuilding each label every cycle (an item stack copy plus `displayName()`, about 41 µs) cost ~5.7 ms/tick at 47 players. Built labels are now kept in memory by ground item and rebuilt only when their inputs change (stack instance, state, showoff, currency, price, face); entries idle for 30 ticks are dropped. Still never saved.
+
 For each viewer:
 
 1. Discover eligible source items inside 16 blocks.

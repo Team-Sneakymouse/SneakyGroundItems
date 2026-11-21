@@ -1,5 +1,6 @@
 package com.danidipp.sneakygrounditems.display.labels
 
+import com.danidipp.sneakygrounditems.commerce.Currency
 import com.danidipp.sneakygrounditems.display.PlacementService
 import com.danidipp.sneakygrounditems.integration.Probe
 import com.danidipp.sneakygrounditems.display.labels.packet.PaperLabelPackets
@@ -7,6 +8,8 @@ import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import org.bukkit.Bukkit
 import org.bukkit.World
+import org.bukkit.block.BlockFace
+import org.bukkit.craftbukkit.entity.CraftItemDisplay
 import org.bukkit.entity.ItemDisplay
 import org.bukkit.plugin.Plugin
 import java.util.UUID
@@ -170,19 +173,34 @@ private class BukkitLabelEnvironment(
     private val placement: PlacementService,
     private val probe: Probe?,
 ) : LabelEnvironment {
+    /** What a label is built from. The stack counts by instance: setting an item's stack always stores a new one. */
+    private data class LabelInputs(
+        val stack: SameInstance,
+        val state: GroundItemState,
+        val showoff: Boolean,
+        val currency: Currency?,
+        val price: Int?,
+        val face: BlockFace?,
+    )
+
     private val chunks = ChunkLabelCache<ItemDisplay>(GroundItemLabels.REFRESH_TICKS.toLong())
+    private val labels = LabelMemo(maxIdleTicks = 3L * GroundItemLabels.REFRESH_TICKS)
     private var tick = 0L
     private var nextMalformedWarning = Long.MIN_VALUE
 
     override fun schedule(tick: () -> Unit): AutoCloseable {
         val task = Bukkit.getScheduler().runTaskTimer(plugin, Runnable {
             this.tick++
-            if (this.tick % GroundItemLabels.REFRESH_TICKS == 0L) chunks.prune(this.tick)
+            if (this.tick % GroundItemLabels.REFRESH_TICKS == 0L) {
+                chunks.prune(this.tick)
+                labels.prune(this.tick)
+            }
             tick()
         }, 1L, 1L)
         return AutoCloseable {
             task.cancel()
             chunks.clear()
+            labels.clear()
         }
     }
 
@@ -245,7 +263,7 @@ private class BukkitLabelEnvironment(
                 if (state == GroundItemState.NORMAL && !showoff) continue
                 val position = item.location
                 items += ChunkLabelItem(item, item.uniqueId, item.entityId, position.x, position.y, position.z) {
-                    derive(item, state, showoff)
+                    label(item, state, showoff)
                 }
             }
             return items
@@ -254,15 +272,37 @@ private class BukkitLabelEnvironment(
         }
     }
 
+    /**
+     * The item's label, rebuilt only when its inputs changed since it was last built. The live NMS stack is read
+     * without the copy [ItemDisplay.getItemStack] makes; only its identity is kept.
+     */
+    private fun label(item: ItemDisplay, state: GroundItemState, showoff: Boolean): GroundItemLabel? {
+        val currency = persistence.getCurrency(item)
+        val price = persistence.getPrice(item)
+        val face = persistence.getFace(item)
+        val inputs = LabelInputs(SameInstance((item as CraftItemDisplay).handle.itemStack), state, showoff, currency, price, face)
+        var built = false
+        val label = labels.get(item.uniqueId, inputs, tick) {
+            built = true
+            derive(item, state, showoff, currency, price, face)
+        }
+        if (!built) probe?.count("labels.reused")
+        return label
+    }
+
     /** Builds the item's display name (CraftItemFactory.displayName) and derives the label; null when malformed. */
-    private fun derive(item: ItemDisplay, state: GroundItemState, showoff: Boolean): GroundItemLabel? {
+    private fun derive(
+        item: ItemDisplay,
+        state: GroundItemState,
+        showoff: Boolean,
+        currency: Currency?,
+        price: Int?,
+        face: BlockFace?,
+    ): GroundItemLabel? {
         val deriveStarted = probe?.start() ?: 0L
         val label = try {
             val stack = item.itemStack
-            GroundItemLabel.derive(
-                state, stack.displayName(), stack.amount, persistence.getCurrency(item), persistence.getPrice(item),
-                persistence.getFace(item) ?: placement.deriveFace(item), showoff,
-            )
+            GroundItemLabel.derive(state, stack.displayName(), stack.amount, currency, price, face ?: placement.deriveFace(item), showoff)
         } finally {
             if (deriveStarted != 0L) probe?.end("labels.derive", deriveStarted)
         }
