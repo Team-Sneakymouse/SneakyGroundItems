@@ -24,7 +24,6 @@ import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.runtime.GroundItemRuntimeStateService
 import com.sneakyitems.api.SneakyItemsAPI
 import com.sneakybagofholding.api.BagOfHoldingApi
-import com.sk89q.worldedit.math.BlockVector3
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.NamespacedKey
@@ -310,7 +309,7 @@ internal class GroundItemCommerceService(
     }
 
     private fun plotSaleItemLimitFailure(display: ItemDisplay): Component? {
-        val plot = lockService.findPriorityFivePlotAt(display.location) ?: return null
+        val plotId = lockService.plotIdAt(display.location) ?: return null
         val world = display.world
         val saleItemCount = world.loadedChunks.asSequence()
             .flatMap { chunk -> chunk.entities.asSequence() }
@@ -318,7 +317,7 @@ internal class GroundItemCommerceService(
             .filter(persistence::isGroundItemDisplay)
             .filter { it.world == world }
             .filter { GroundItemPolicy.occupiesSaleSlot(persistence.getGroundItemState(it)) }
-            .filter { plot.contains(BlockVector3.at(it.location.blockX, it.location.blockY, it.location.blockZ)) }
+            .filter { lockService.plotIdAt(it.location) == plotId }
             .count()
 
         return when {

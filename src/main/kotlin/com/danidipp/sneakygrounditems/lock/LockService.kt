@@ -2,13 +2,7 @@ package com.danidipp.sneakygrounditems.lock
 
 import com.danidipp.sneakygrounditems.command.Command
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
-import com.sk89q.worldedit.bukkit.BukkitAdapter
-import com.sk89q.worldedit.math.BlockVector3
-import com.sk89q.worldguard.WorldGuard
-import com.sk89q.worldguard.bukkit.WorldGuardPlugin
-import com.sk89q.worldguard.protection.regions.ProtectedRegion
 import net.kyori.adventure.text.Component
-import org.bukkit.Bukkit
 import org.bukkit.GameMode
 import org.bukkit.Location
 import org.bukkit.command.CommandSender
@@ -20,6 +14,7 @@ import java.time.ZoneId
 
 internal class LockService(
     private val persistence: PersistenceService,
+    private val plots: PlotLookup,
 ) {
     enum class LockMode {
         NONE,
@@ -132,7 +127,9 @@ internal class LockService(
 
     fun clearInvalidPlotLock(display: ItemDisplay) {
         if (persistence.getLockMode(display) != LockMode.PLOT) return
-        if (hasPriorityFivePlotAt(display.location)) return
+        // Unknown plots (SneakyPlots missing or still loading) must not read as "no plot here" and wipe plot locks.
+        if (!plots.isReady) return
+        if (plotIdAt(display.location) != null) return
 
         persistence.clearLock(display)
     }
@@ -179,37 +176,12 @@ internal class LockService(
     }
 
     fun isPlotMember(player: Player, location: Location): Boolean {
-        val worldGuardPlugin = Bukkit.getPluginManager().getPlugin("WorldGuard") as? WorldGuardPlugin ?: return false
-        val worldGuardPlayer = worldGuardPlugin.wrapPlayer(player)
-
-        return priorityFivePlotsAt(location).any { region ->
-            region.isOwner(worldGuardPlayer) || region.isMember(worldGuardPlayer)
-        }
+        val plotId = plotIdAt(location) ?: return false
+        return plots.isMember(player, plotId)
     }
 
-    fun findPriorityFivePlotAt(location: Location): ProtectedRegion? {
-        return priorityFivePlotsAt(location).minByOrNull { it.id }
-    }
-
-    private fun hasPriorityFivePlotAt(location: Location): Boolean {
-        return priorityFivePlotsAt(location).isNotEmpty()
-    }
-
-    private fun priorityFivePlotsAt(location: Location): List<ProtectedRegion> {
-        val world = location.world ?: return emptyList()
-        val worldGuardPlugin = Bukkit.getPluginManager().getPlugin("WorldGuard") as? WorldGuardPlugin ?: return emptyList()
-        if (!worldGuardPlugin.isEnabled) return emptyList()
-
-        val regionManager = runCatching {
-            WorldGuard.getInstance().platform.regionContainer[BukkitAdapter.adapt(world)]
-        }.getOrNull() ?: return emptyList()
-        val applicableRegions = regionManager.getApplicableRegions(BlockVector3.at(location.x, location.y, location.z))
-
-        return applicableRegions
-            .filter { it.priority == 5 }
-            .sortedBy { it.id }
-            .toList()
-    }
+    /** The SneakyPlots plot containing [location], or null outside plots and while plots aren't known. */
+    fun plotIdAt(location: Location): String? = plots.plotIdAt(location)
 
     private fun todayLockDate(): String {
         return LocalDate.now(lockZone).toString()

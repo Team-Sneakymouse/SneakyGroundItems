@@ -10,7 +10,6 @@ import com.danidipp.sneakygrounditems.lock.LockService
 import com.danidipp.sneakygrounditems.migration.GroundItemMigrationService
 import com.danidipp.sneakygrounditems.model.GroundItemState
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
-import com.sk89q.worldedit.math.BlockVector3
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.arguments.DoubleArgumentType
 import com.mojang.brigadier.arguments.IntegerArgumentType
@@ -274,15 +273,15 @@ internal class Command(
 
     private fun checkPlot(context: CommandContext<CommandSourceStack>): Int {
         val player = context.source.sender as? Player ?: return fail(context, "Only players can run /grounditem check plot")
-        val plot = lockService.findPriorityFivePlotAt(player.location)
+        val plotId = lockService.plotIdAt(player.location)
             ?: return fail(context, "You are not standing in a plot")
         val world = player.world
         val counts = countGroundItems {
-            it.world == world && plot.contains(BlockVector3.at(it.location.blockX, it.location.blockY, it.location.blockZ))
+            it.world == world && lockService.plotIdAt(it.location) == plotId
         }
 
         context.source.sender.sendMessage(
-            "${plot.id} contains ${counts.total} ground items " +
+            "$plotId contains ${counts.total} ground items " +
                 "(${counts.saleSlots} sale slots: ${counts.activeSales} active, ${counts.stolen} stolen; ${counts.locked} locked)",
         )
         return Command.SINGLE_SUCCESS

@@ -29,9 +29,6 @@ repositories {
         url = uri("https://repo.papermc.io/repository/maven-public/")
     }
     maven {
-        url = uri("https://maven.enginehub.org/repo/")
-    }
-    maven {
         name = "playpro-repo"
         url = uri("https://maven.playpro.com")
     }
@@ -42,16 +39,8 @@ repositories {
 dependencies {
     implementation(kotlin("stdlib"))
     paperweight.paperDevBundle("26.2.build.117-stable")
-    compileOnly("com.sk89q.worldguard:worldguard-bukkit:7.0.18") {
-        isTransitive = false
-    }
-    compileOnly("com.sk89q.worldguard:worldguard-core:7.0.18") {
-        isTransitive = false
-    }
-    compileOnly("com.sk89q.worldedit:worldedit-bukkit:7.4.0") {
-        isTransitive = false
-    }
-    compileOnly("com.sk89q.worldedit:worldedit-core:7.4.0") {
+    // plots and plot membership (optional at runtime; only integration/sneakyplots names it)
+    compileOnly("io.github.team-sneakymouse:sneakyplots:2026.11.22-0f66c9dd3f24") {
         isTransitive = false
     }
     // 23.3 was vendored; PlayPro Maven publishes through 23.2 / 24.x (listeners used by audit logger present).

@@ -8,6 +8,7 @@ import com.danidipp.sneakygrounditems.display.GroundItemDisplayService
 import com.danidipp.sneakygrounditems.display.PlacementService
 import com.danidipp.sneakygrounditems.integration.coreprotect.GroundItemAuditService
 import com.danidipp.sneakygrounditems.integration.magicspells.GroundItemMetadataService
+import com.danidipp.sneakygrounditems.integration.sneakyplots.SneakyPlotsLookup
 import com.danidipp.sneakygrounditems.interaction.GroundItemEffectsService
 import com.danidipp.sneakygrounditems.interaction.GroundItemInteractionService
 import com.danidipp.sneakygrounditems.interaction.GroundItemInventoryService
@@ -36,7 +37,7 @@ internal data class GroundItemPluginContext(
     companion object {
         fun create(plugin: SneakyGroundItems): GroundItemPluginContext {
             val persistence = PersistenceService(plugin)
-            val lockService = LockService(persistence)
+            val lockService = LockService(persistence, SneakyPlotsLookup.createOrNone())
             val runtimeState = GroundItemRuntimeStateService()
             val metadataService = GroundItemMetadataService()
             val auditService = GroundItemAuditService()

@@ -27,9 +27,11 @@ dependencies:
       load: BEFORE
       required: false
       join-classpath: true
-    WorldGuard:
+    # Optional: plots and plot membership (integration/sneakyplots). Without it nothing is in a plot.
+    SneakyPlots:
       load: BEFORE
       required: false
+      join-classpath: true
     CoreProtect:
       load: BEFORE
       required: false

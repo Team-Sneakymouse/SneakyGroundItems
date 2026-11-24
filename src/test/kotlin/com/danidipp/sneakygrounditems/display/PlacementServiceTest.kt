@@ -1,6 +1,7 @@
 package com.danidipp.sneakygrounditems.display
 
 import com.danidipp.sneakygrounditems.lock.LockService
+import com.danidipp.sneakygrounditems.lock.NoPlots
 import com.danidipp.sneakygrounditems.persistence.PersistenceService
 import com.danidipp.sneakygrounditems.testutil.fakeItemDisplay
 import com.danidipp.sneakygrounditems.testutil.testPlugin
@@ -15,7 +16,7 @@ import kotlin.test.assertTrue
 
 class PlacementServiceTest {
     private val persistence = PersistenceService(testPlugin())
-    private val service = PlacementService(persistence, LockService(persistence))
+    private val service = PlacementService(persistence, LockService(persistence, NoPlots))
 
     @Test
     fun rescaleTransformationPreservesOrientationAndUpdatesScale() {
